@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { HIRAGANA, KATAKANA, type KanaEntry } from "@/app/lib/kana";
+import { supabase, type LeaderboardEntry } from "@/app/lib/supabase";
 
 type Mode = "hiragana" | "katakana" | "mixed";
 type Script = "hiragana" | "katakana";
@@ -612,12 +613,63 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 }
 
 function LeaderboardPanel() {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    supabase
+      .from("leaderboard")
+      .select("*")
+      .order("time", { ascending: true })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setError(true);
+        } else {
+          setEntries(data ?? []);
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
       <h2 className="mb-6 text-lg text-zinc-200">leaderboard</h2>
-      <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-600">
-        No scores yet — be the first to set a record!
-      </div>
+
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">loading…</div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-red-400">
+          couldn&apos;t load the leaderboard
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-600">
+          No scores yet — be the first to set a record!
+        </div>
+      ) : (
+        <ol className="flex flex-col gap-2">
+          {entries.map((entry, i) => (
+            <li
+              key={entry.id}
+              className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-sm"
+            >
+              <span className="flex items-center gap-3">
+                <span className="w-5 text-zinc-500">{i + 1}</span>
+                <span className="text-zinc-200">{entry.name}</span>
+              </span>
+              <span className="text-zinc-400">{entry.time.toFixed(1)}s</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
