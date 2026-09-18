@@ -7,7 +7,6 @@ import { HIRAGANA, KATAKANA, type KanaEntry } from "@/app/lib/kana";
 type Mode = "hiragana" | "katakana" | "mixed";
 type Script = "hiragana" | "katakana";
 type Result = "correct" | "wrong";
-type Panel = "leaderboard" | "stats" | null;
 type Mastery = "mastered" | "learning" | "needs-work" | "not-started";
 
 type HistoryItem = {
@@ -137,7 +136,8 @@ export default function HiraganaQuiz() {
 
   const [charStats, setCharStats] = useState<Record<string, CharStat>>({});
 
-  const [activePanel, setActivePanel] = useState<Panel>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
   const [statsScript, setStatsScript] = useState<Script>("hiragana");
   const [optionsOpen, setOptionsOpen] = useState(false);
 
@@ -325,7 +325,7 @@ export default function HiraganaQuiz() {
       }}
     >
       <header className="relative z-40 grid grid-cols-3 items-start px-8 py-6">
-        <div className="text-sm text-zinc-300">
+        <div className="text-base text-zinc-300">
           kana<span className="text-zinc-600">.</span>drill
         </div>
 
@@ -338,7 +338,7 @@ export default function HiraganaQuiz() {
                   e.stopPropagation();
                   if (m !== mode) setMode(m);
                 }}
-                className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
                   m === mode
                     ? "border-green-800/60 bg-green-950/30 text-green-400"
                     : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
@@ -353,11 +353,10 @@ export default function HiraganaQuiz() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setOptionsOpen(false);
-                setActivePanel((p) => (p === "leaderboard" ? null : "leaderboard"));
+                setLeaderboardOpen((o) => !o);
               }}
-              className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
-                activePanel === "leaderboard"
+              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                leaderboardOpen
                   ? "border-green-800/60 bg-green-950/30 text-green-400"
                   : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
               }`}
@@ -367,11 +366,10 @@ export default function HiraganaQuiz() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setOptionsOpen(false);
-                setActivePanel((p) => (p === "stats" ? null : "stats"));
+                setStatsOpen((o) => !o);
               }}
-              className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
-                activePanel === "stats"
+              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                statsOpen
                   ? "border-green-800/60 bg-green-950/30 text-green-400"
                   : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
               }`}
@@ -385,10 +383,9 @@ export default function HiraganaQuiz() {
                 title="Options"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setActivePanel(null);
                   setOptionsOpen((o) => !o);
                 }}
-                className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+                className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
                   optionsOpen
                     ? "border-green-800/60 bg-green-950/30 text-green-400"
                     : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
@@ -400,9 +397,9 @@ export default function HiraganaQuiz() {
               {optionsOpen && (
                 <div
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute top-full right-0 z-50 mt-2 w-48 rounded-md border border-zinc-800 bg-zinc-950 p-3 shadow-xl"
+                  className="absolute top-full right-0 z-50 mt-2 w-52 rounded-md border border-zinc-800 bg-zinc-950 p-3 shadow-xl"
                 >
-                  <label className="flex items-center gap-1.5 text-xs text-zinc-400 select-none">
+                  <label className="flex items-center gap-2 text-sm text-zinc-400 select-none">
                     <input
                       type="checkbox"
                       checked={skipAnimation}
@@ -415,7 +412,7 @@ export default function HiraganaQuiz() {
                     href={BUG_REPORT_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 block text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+                    className="mt-3 block text-sm text-zinc-400 transition-colors hover:text-zinc-200"
                   >
                     report a bug
                   </a>
@@ -425,7 +422,7 @@ export default function HiraganaQuiz() {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 text-sm text-zinc-400">
+        <div className="flex items-center justify-end gap-3 text-base text-zinc-400">
           <span>{formatTime(elapsedSeconds)}</span>
           <button
             aria-label="Reset session"
@@ -526,7 +523,7 @@ export default function HiraganaQuiz() {
               </div>
 
               <p
-                className={`text-[11px] text-zinc-600 transition-opacity ${paused ? "opacity-100" : "opacity-0"}`}
+                className={`text-xs text-zinc-600 transition-opacity ${paused ? "opacity-100" : "opacity-0"}`}
               >
                 statistics paused
               </p>
@@ -534,7 +531,7 @@ export default function HiraganaQuiz() {
               <Link
                 href="/beginner"
                 onClick={(e) => e.stopPropagation()}
-                className={`rounded-md border px-3 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300 ${
+                className={`rounded-md border px-3 py-1.5 text-sm text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300 ${
                   beginnerGlow ? "animate-beginner-glow" : "border-zinc-800"
                 }`}
               >
@@ -554,11 +551,11 @@ export default function HiraganaQuiz() {
       </div>
 
       <div className="flex items-center gap-3 overflow-x-auto px-16 py-4">
-        <span className="shrink-0 text-xs text-zinc-600">recent</span>
+        <span className="shrink-0 text-sm text-zinc-600">recent</span>
         {history.map((h) => (
           <div
             key={h.key}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
               h.result === "correct"
                 ? "border-green-900/60 bg-green-950/40 text-green-400"
                 : h.result === "wrong"
@@ -573,28 +570,33 @@ export default function HiraganaQuiz() {
       </div>
 
       <div
-        className={`fixed inset-0 z-30 bg-black/60 transition-opacity duration-300 ${
-          activePanel ? "opacity-100" : "pointer-events-none opacity-0"
+        className={`fixed inset-y-0 left-0 z-50 w-[480px] max-w-[90vw] border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
         }`}
-        onClick={() => setActivePanel(null)}
-      />
-      <div
-        className={`fixed inset-y-0 right-0 z-50 w-[440px] max-w-[90vw] border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
-          activePanel ? "translate-x-0" : "pointer-events-none translate-x-full"
-        }`}
-        onClick={(e) => e.stopPropagation()}
       >
         <button
-          aria-label="Close panel"
-          onClick={() => setActivePanel(null)}
+          aria-label="Close stats"
+          onClick={() => setStatsOpen(false)}
           className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
         >
           ✕
         </button>
-        {activePanel === "leaderboard" && <LeaderboardPanel />}
-        {activePanel === "stats" && (
-          <StatsPanel charStats={charStats} script={statsScript} onScriptChange={setStatsScript} />
-        )}
+        <StatsPanel charStats={charStats} script={statsScript} onScriptChange={setStatsScript} />
+      </div>
+
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-[480px] max-w-[90vw] border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          leaderboardOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+        }`}
+      >
+        <button
+          aria-label="Close leaderboard"
+          onClick={() => setLeaderboardOpen(false)}
+          className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+        >
+          ✕
+        </button>
+        <LeaderboardPanel />
       </div>
     </div>
   );
@@ -603,8 +605,8 @@ export default function HiraganaQuiz() {
 function Stat({ value, label }: { value: string | number; label: string }) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <span className="text-3xl font-semibold text-zinc-50">{value}</span>
-      <span className="text-[10px] tracking-widest text-zinc-600 uppercase">{label}</span>
+      <span className="text-4xl font-semibold text-zinc-50">{value}</span>
+      <span className="text-xs tracking-widest text-zinc-600 uppercase">{label}</span>
     </div>
   );
 }
@@ -612,8 +614,8 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 function LeaderboardPanel() {
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
-      <h2 className="mb-6 text-sm text-zinc-200">leaderboard</h2>
-      <div className="flex flex-1 items-center justify-center text-center text-xs text-zinc-600">
+      <h2 className="mb-6 text-lg text-zinc-200">leaderboard</h2>
+      <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-600">
         No scores yet — be the first to set a record!
       </div>
     </div>
@@ -635,8 +637,8 @@ function StatsPanel({
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
       <div className="mb-6 flex items-center justify-between pr-6">
-        <h2 className="text-sm text-zinc-200">gojūon progress</h2>
-        <span className="text-sm text-zinc-500">
+        <h2 className="text-lg text-zinc-200">gojūon progress</h2>
+        <span className="text-base text-zinc-500">
           {masteredCount} / {source.length}
         </span>
       </div>
@@ -646,11 +648,11 @@ function StatsPanel({
           {GOJUON_ROWS.flatMap((row, ri) =>
             row.map((idx, ci) =>
               idx === null ? (
-                <div key={`${ri}-${ci}`} className="h-10 w-10" />
+                <div key={`${ri}-${ci}`} className="h-11 w-11" />
               ) : (
                 <div
                   key={`${ri}-${ci}`}
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-base ${masteryClasses(
+                  className={`flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${masteryClasses(
                     getMastery(charStats[source[idx].char])
                   )}`}
                 >
@@ -661,13 +663,13 @@ function StatsPanel({
           )}
         </div>
 
-        <div className="flex w-28 shrink-0 flex-col gap-4">
+        <div className="flex w-32 shrink-0 flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             {(["hiragana", "katakana"] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => onScriptChange(s)}
-                className={`rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                className={`rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
                   s === script
                     ? "border-green-800/60 bg-green-950/30 text-green-400"
                     : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
@@ -678,7 +680,7 @@ function StatsPanel({
             ))}
           </div>
 
-          <div className="flex flex-col gap-2 text-xs text-zinc-400">
+          <div className="flex flex-col gap-2 text-sm text-zinc-400">
             {MASTERY_LEGEND.map((l) => (
               <div key={l.key} className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${l.dot}`} />
