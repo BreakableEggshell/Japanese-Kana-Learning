@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { HIRAGANA, KATAKANA, type KanaEntry } from "@/app/lib/kana";
 
 type Mode = "hiragana" | "katakana" | "mixed";
@@ -10,7 +11,7 @@ type HistoryItem = {
   key: number;
   char: string;
   romaji: string;
-  result: Result;
+  result: Result | "skip";
 };
 
 type SideItem = {
@@ -28,6 +29,7 @@ const POOLS: Record<Mode, KanaEntry[]> = {
 const MODES: Mode[] = ["hiragana", "katakana", "mixed"];
 const REVEAL_DELAY_MS = 500;
 const MIN_CHARS_BEFORE_WRONG = 2;
+const IDLE_PAUSE_MS = 10000;
 
 function pickRandom(pool: KanaEntry[], excludeChar?: string): KanaEntry {
   if (pool.length <= 1) return pool[0];
@@ -68,6 +70,7 @@ export default function HiraganaQuiz() {
 
   const [input, setInput] = useState("");
   const [revealed, setRevealed] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [correctCount, setCorrectCount] = useState(0);
@@ -80,6 +83,8 @@ export default function HiraganaQuiz() {
 
   const startTimeRef = useRef(Date.now());
   const itemStartRef = useRef(Date.now());
+  const lastActivityRef = useRef(Date.now());
+  const pauseStartRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const resetSession = useCallback((m: Mode) => {
@@ -91,6 +96,7 @@ export default function HiraganaQuiz() {
     setPrevItem(null);
     setInput("");
     setRevealed(false);
+    setPaused(false);
     setHistory([]);
     setCorrectCount(0);
     setStreak(0);
@@ -100,6 +106,8 @@ export default function HiraganaQuiz() {
     setAnsweredCount(0);
     startTimeRef.current = Date.now();
     itemStartRef.current = Date.now();
+    lastActivityRef.current = Date.now();
+    pauseStartRef.current = null;
     setElapsedSeconds(0);
   }, []);
 
@@ -107,8 +115,31 @@ export default function HiraganaQuiz() {
     resetSession(mode);
   }, [mode, resetSession]);
 
+  const resume = useCallback(() => {
+    if (pauseStartRef.current !== null) {
+      const idleDuration = Date.now() - pauseStartRef.current;
+      startTimeRef.current += idleDuration;
+      itemStartRef.current += idleDuration;
+      pauseStartRef.current = null;
+    }
+    lastActivityRef.current = Date.now();
+    setPaused(false);
+  }, []);
+
+  const registerActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (paused) resume();
+  }, [paused, resume]);
+
   useEffect(() => {
     const id = setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= IDLE_PAUSE_MS) {
+        setPaused((wasPaused) => {
+          if (!wasPaused) pauseStartRef.current = Date.now();
+          return true;
+        });
+        return;
+      }
       setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
     }, 1000);
     return () => clearInterval(id);
@@ -125,11 +156,14 @@ export default function HiraganaQuiz() {
 
       const elapsed = Date.now() - itemStartRef.current;
 
-      if (result !== "skip") {
-        setHistory((prev) => [
+      setHistory((prev) =>
+        [
           ...prev,
           { key: nextKey(), char: current.char, romaji: current.answers[0], result },
-        ].slice(-10));
+        ].slice(-10)
+      );
+
+      if (result !== "skip") {
         setAnsweredCount((c) => c + 1);
         setTotalAnswerMs((t) => t + elapsed);
         if (result === "correct") {
@@ -154,6 +188,7 @@ export default function HiraganaQuiz() {
   );
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    registerActivity();
     if (revealed || !current) return;
     const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, "");
     setInput(raw);
@@ -167,6 +202,7 @@ export default function HiraganaQuiz() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    registerActivity();
     if (revealed || !current) return;
 
     if (e.key === "Enter") {
@@ -259,11 +295,11 @@ export default function HiraganaQuiz() {
         {current && next && (
           <>
             <div className="flex items-center justify-center gap-14 sm:gap-24">
-              <div className="flex h-16 w-16 items-center justify-center">
+              <div className="flex h-20 w-20 items-center justify-center">
                 {prevItem && (
                   <div
                     key={prevItem.key}
-                    className={`flex h-12 w-12 -rotate-12 items-center justify-center rounded-xl border text-3xl text-zinc-500 ${
+                    className={`flex h-16 w-16 -rotate-12 items-center justify-center rounded-xl border text-4xl text-zinc-500 ${
                       skipAnimation ? "" : "animate-kana-settle"
                     } ${
                       prevItem.result === "correct"
@@ -291,10 +327,10 @@ export default function HiraganaQuiz() {
                 </span>
               </div>
 
-              <div className="flex h-16 w-16 items-center justify-center">
+              <div className="flex h-20 w-20 items-center justify-center">
                 <div
                   key={`${next.char}-${seenCount}`}
-                  className={`flex h-12 w-12 rotate-12 items-center justify-center rounded-xl text-3xl text-zinc-600 opacity-50 ${
+                  className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-4xl text-zinc-600 opacity-50 ${
                     skipAnimation ? "" : "animate-kana-pop"
                   }`}
                 >
@@ -307,7 +343,23 @@ export default function HiraganaQuiz() {
               <div className="relative flex items-center justify-center border-b border-zinc-800 pb-2">
                 <div className="flex min-h-9 min-w-[3ch] items-center text-2xl">
                   <span className={revealed ? "text-amber-400" : "text-white"}>{input}</span>
-                  {!revealed && <span className="ml-0.5 h-6 w-2.5 animate-blink bg-white" />}
+                  {!revealed &&
+                    (paused ? (
+                      <button
+                        aria-label="Resume"
+                        title="Resume"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resume();
+                          inputRef.current?.focus();
+                        }}
+                        className="ml-1 flex h-6 w-6 items-center justify-center rounded-sm text-sm text-zinc-300 hover:text-white"
+                      >
+                        ⏸
+                      </button>
+                    ) : (
+                      <span className="ml-0.5 h-6 w-2.5 animate-blink bg-white" />
+                    ))}
                 </div>
                 <input
                   ref={inputRef}
@@ -323,11 +375,19 @@ export default function HiraganaQuiz() {
                 />
               </div>
 
-              <div className="flex items-center gap-4 text-xs text-zinc-600">
-                <span>⏎ submit</span>
-                <span>␣ skip</span>
-                <span>→ reveal</span>
-              </div>
+              <p
+                className={`text-[11px] text-zinc-600 transition-opacity ${paused ? "opacity-100" : "opacity-0"}`}
+              >
+                statistics paused
+              </p>
+
+              <Link
+                href="/beginner"
+                onClick={(e) => e.stopPropagation()}
+                className="rounded-md border border-zinc-800 px-3 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300"
+              >
+                Beginner?
+              </Link>
             </div>
           </>
         )}
@@ -349,7 +409,9 @@ export default function HiraganaQuiz() {
             className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs ${
               h.result === "correct"
                 ? "border-green-900/60 bg-green-950/40 text-green-400"
-                : "border-red-900/60 bg-red-950/40 text-red-400"
+                : h.result === "wrong"
+                  ? "border-red-900/60 bg-red-950/40 text-red-400"
+                  : "border-white/50 bg-white/5 text-zinc-200"
             }`}
           >
             <span>{h.char}</span>
