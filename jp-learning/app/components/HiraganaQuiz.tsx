@@ -111,6 +111,11 @@ function masteryClasses(m: Mastery) {
   }
 }
 
+function playSound(src: string) {
+  const audio = new Audio(src);
+  audio.play().catch(() => {});
+}
+
 let keySeq = 0;
 const nextKey = () => keySeq++;
 
@@ -235,8 +240,10 @@ export default function HiraganaQuiz() {
           setCorrectCount((c) => c + 1);
           setStreak((s) => s + 1);
           setTotalCorrectChars((c) => c + current.answers[0].length);
+          playSound("/correct.mp3");
         } else {
           setStreak(0);
+          playSound("/wrong.mp3");
         }
         setPrevItem({ key: nextKey(), char: current.char, result });
 
