@@ -324,7 +324,7 @@ export default function HiraganaQuiz() {
         setOptionsOpen(false);
       }}
     >
-      <header className="relative z-40 grid grid-cols-3 items-start px-8 py-6">
+      <header className="grid grid-cols-3 items-start px-8 py-6">
         <div className="text-base text-zinc-300">
           kana<span className="text-zinc-600">.</span>drill
         </div>
@@ -438,7 +438,7 @@ export default function HiraganaQuiz() {
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-10 px-4">
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4">
         {current && next && (
           <>
             <div className="flex items-center justify-center gap-14 sm:gap-24">
@@ -540,6 +540,36 @@ export default function HiraganaQuiz() {
             </div>
           </>
         )}
+
+        <div
+          className={`absolute inset-y-0 left-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+            statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
+          }`}
+        >
+          <button
+            aria-label="Close stats"
+            onClick={() => setStatsOpen(false)}
+            className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            ✕
+          </button>
+          <StatsPanel charStats={charStats} script={statsScript} onScriptChange={setStatsScript} />
+        </div>
+
+        <div
+          className={`absolute inset-y-0 right-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+            leaderboardOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+          }`}
+        >
+          <button
+            aria-label="Close leaderboard"
+            onClick={() => setLeaderboardOpen(false)}
+            className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            ✕
+          </button>
+          <LeaderboardPanel />
+        </div>
       </main>
 
       <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
@@ -567,36 +597,6 @@ export default function HiraganaQuiz() {
             <span className="opacity-70">{h.romaji}</span>
           </div>
         ))}
-      </div>
-
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-[480px] max-w-[90vw] border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
-          statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
-        }`}
-      >
-        <button
-          aria-label="Close stats"
-          onClick={() => setStatsOpen(false)}
-          className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
-        >
-          ✕
-        </button>
-        <StatsPanel charStats={charStats} script={statsScript} onScriptChange={setStatsScript} />
-      </div>
-
-      <div
-        className={`fixed inset-y-0 right-0 z-50 w-[480px] max-w-[90vw] border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
-          leaderboardOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
-        }`}
-      >
-        <button
-          aria-label="Close leaderboard"
-          onClick={() => setLeaderboardOpen(false)}
-          className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
-        >
-          ✕
-        </button>
-        <LeaderboardPanel />
       </div>
     </div>
   );
