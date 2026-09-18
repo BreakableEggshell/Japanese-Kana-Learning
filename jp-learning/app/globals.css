@@ -89,3 +89,19 @@ body {
   display: inline-block;
   animation: kana-grow-shrink 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+@keyframes beginner-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+    border-color: rgb(39 39 42);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(250, 204, 21, 0.55);
+    border-color: rgba(250, 204, 21, 0.7);
+  }
+}
+
+.animate-beginner-glow {
+  animation: beginner-glow 1s ease-in-out infinite;
+}

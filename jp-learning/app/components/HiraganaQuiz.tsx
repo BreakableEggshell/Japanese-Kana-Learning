@@ -5,7 +5,10 @@ import Link from "next/link";
 import { HIRAGANA, KATAKANA, type KanaEntry } from "@/app/lib/kana";
 
 type Mode = "hiragana" | "katakana" | "mixed";
+type Script = "hiragana" | "katakana";
 type Result = "correct" | "wrong";
+type Panel = "leaderboard" | "stats" | null;
+type Mastery = "mastered" | "learning" | "needs-work" | "not-started";
 
 type HistoryItem = {
   key: number;
@@ -20,6 +23,12 @@ type SideItem = {
   result?: Result;
 };
 
+type CharStat = {
+  correctStreak: number;
+  wrongCount: number;
+  attempts: number;
+};
+
 const POOLS: Record<Mode, KanaEntry[]> = {
   hiragana: HIRAGANA,
   katakana: KATAKANA,
@@ -30,6 +39,31 @@ const MODES: Mode[] = ["hiragana", "katakana", "mixed"];
 const REVEAL_DELAY_MS = 500;
 const MIN_CHARS_BEFORE_WRONG = 2;
 const IDLE_PAUSE_MS = 10000;
+const EARLY_ATTEMPTS_THRESHOLD = 8;
+const BEGINNER_GLOW_MS = 5000;
+const BUG_REPORT_URL = "https://github.com/BreakableEggshell/Japanese-Kana-Learning/issues";
+
+// Gojūon table laid out as index positions into HIRAGANA/KATAKANA (both share the same order).
+const GOJUON_ROWS: (number | null)[][] = [
+  [0, 1, 2, 3, 4],
+  [5, 6, 7, 8, 9],
+  [10, 11, 12, 13, 14],
+  [15, 16, 17, 18, 19],
+  [20, 21, 22, 23, 24],
+  [25, 26, 27, 28, 29],
+  [30, 31, 32, 33, 34],
+  [35, null, 36, null, 37],
+  [38, 39, 40, 41, 42],
+  [43, null, null, null, 44],
+  [45, null, null, null, null],
+];
+
+const MASTERY_LEGEND: { key: Mastery; label: string; dot: string }[] = [
+  { key: "mastered", label: "mastered", dot: "bg-green-500" },
+  { key: "learning", label: "learning", dot: "bg-violet-400" },
+  { key: "needs-work", label: "needs work", dot: "bg-red-400" },
+  { key: "not-started", label: "not started", dot: "bg-zinc-600" },
+];
 
 function pickRandom(pool: KanaEntry[], excludeChar?: string): KanaEntry {
   if (pool.length <= 1) return pool[0];
@@ -57,6 +91,26 @@ function isSettled(input: string, answers: string[]) {
   return !answers.some((a) => a !== input && a.length > input.length && a.startsWith(input));
 }
 
+function getMastery(stat: CharStat | undefined): Mastery {
+  if (!stat || stat.attempts === 0) return "not-started";
+  if (stat.correctStreak >= 3) return "mastered";
+  if (stat.wrongCount >= 2 && stat.correctStreak === 0) return "needs-work";
+  return "learning";
+}
+
+function masteryClasses(m: Mastery) {
+  switch (m) {
+    case "mastered":
+      return "border-green-800/60 bg-green-950/40 text-green-400";
+    case "learning":
+      return "border-violet-800/60 bg-violet-950/40 text-violet-300";
+    case "needs-work":
+      return "border-red-800/60 bg-red-950/40 text-red-400";
+    default:
+      return "border-zinc-800 bg-zinc-900/40 text-zinc-600";
+  }
+}
+
 let keySeq = 0;
 const nextKey = () => keySeq++;
 
@@ -81,10 +135,20 @@ export default function HiraganaQuiz() {
   const [answeredCount, setAnsweredCount] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  const [charStats, setCharStats] = useState<Record<string, CharStat>>({});
+
+  const [activePanel, setActivePanel] = useState<Panel>(null);
+  const [statsScript, setStatsScript] = useState<Script>("hiragana");
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  const [beginnerStruggling, setBeginnerStruggling] = useState(false);
+  const [beginnerGlow, setBeginnerGlow] = useState(false);
+
   const startTimeRef = useRef(Date.now());
   const itemStartRef = useRef(Date.now());
   const lastActivityRef = useRef(Date.now());
   const pauseStartRef = useRef<number | null>(null);
+  const earlyAttemptsRef = useRef<boolean[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const resetSession = useCallback((m: Mode) => {
@@ -174,6 +238,27 @@ export default function HiraganaQuiz() {
           setStreak(0);
         }
         setPrevItem({ key: nextKey(), char: current.char, result });
+
+        setCharStats((prev) => {
+          const s = prev[current.char] ?? { correctStreak: 0, wrongCount: 0, attempts: 0 };
+          const nextStat: CharStat =
+            result === "correct"
+              ? { correctStreak: s.correctStreak + 1, wrongCount: s.wrongCount, attempts: s.attempts + 1 }
+              : { correctStreak: 0, wrongCount: s.wrongCount + 1, attempts: s.attempts + 1 };
+          return { ...prev, [current.char]: nextStat };
+        });
+
+        if (earlyAttemptsRef.current.length < EARLY_ATTEMPTS_THRESHOLD) {
+          earlyAttemptsRef.current = [...earlyAttemptsRef.current, result === "correct"];
+          if (
+            earlyAttemptsRef.current.length === EARLY_ATTEMPTS_THRESHOLD &&
+            earlyAttemptsRef.current.every((ok) => !ok)
+          ) {
+            setBeginnerStruggling(true);
+            setBeginnerGlow(true);
+            setTimeout(() => setBeginnerGlow(false), BEGINNER_GLOW_MS);
+          }
+        }
       } else {
         setPrevItem({ key: nextKey(), char: current.char });
       }
@@ -234,9 +319,12 @@ export default function HiraganaQuiz() {
   return (
     <div
       className="flex min-h-screen w-full flex-col bg-black font-mono text-zinc-50"
-      onClick={() => inputRef.current?.focus()}
+      onClick={() => {
+        inputRef.current?.focus();
+        setOptionsOpen(false);
+      }}
     >
-      <header className="grid grid-cols-3 items-start px-8 py-6">
+      <header className="relative z-40 grid grid-cols-3 items-start px-8 py-6">
         <div className="text-sm text-zinc-300">
           kana<span className="text-zinc-600">.</span>drill
         </div>
@@ -261,18 +349,80 @@ export default function HiraganaQuiz() {
             ))}
           </div>
 
-          <label
-            className="flex items-center gap-1.5 text-xs text-zinc-500 select-none"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="checkbox"
-              checked={skipAnimation}
-              onChange={(e) => setSkipAnimation(e.target.checked)}
-              className="accent-green-500"
-            />
-            disable animation
-          </label>
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setOptionsOpen(false);
+                setActivePanel((p) => (p === "leaderboard" ? null : "leaderboard"));
+              }}
+              className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+                activePanel === "leaderboard"
+                  ? "border-green-800/60 bg-green-950/30 text-green-400"
+                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              leaderboard
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setOptionsOpen(false);
+                setActivePanel((p) => (p === "stats" ? null : "stats"));
+              }}
+              className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+                activePanel === "stats"
+                  ? "border-green-800/60 bg-green-950/30 text-green-400"
+                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              stats
+            </button>
+
+            <div className="relative">
+              <button
+                aria-label="Options"
+                title="Options"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivePanel(null);
+                  setOptionsOpen((o) => !o);
+                }}
+                className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+                  optionsOpen
+                    ? "border-green-800/60 bg-green-950/30 text-green-400"
+                    : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                ⚙
+              </button>
+
+              {optionsOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-full right-0 z-50 mt-2 w-48 rounded-md border border-zinc-800 bg-zinc-950 p-3 shadow-xl"
+                >
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={skipAnimation}
+                      onChange={(e) => setSkipAnimation(e.target.checked)}
+                      className="accent-green-500"
+                    />
+                    disable animation
+                  </label>
+                  <a
+                    href={BUG_REPORT_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-3 block text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+                  >
+                    report a bug
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 text-sm text-zinc-400">
@@ -286,7 +436,7 @@ export default function HiraganaQuiz() {
             }}
             className="text-zinc-500 transition-colors hover:text-zinc-300"
           >
-            ⚙
+            ↻
           </button>
         </div>
       </header>
@@ -384,9 +534,11 @@ export default function HiraganaQuiz() {
               <Link
                 href="/beginner"
                 onClick={(e) => e.stopPropagation()}
-                className="rounded-md border border-zinc-800 px-3 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300"
+                className={`rounded-md border px-3 py-1 text-xs text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300 ${
+                  beginnerGlow ? "animate-beginner-glow" : "border-zinc-800"
+                }`}
               >
-                Beginner?
+                {beginnerStruggling ? "Beginner? Learn the basics here!" : "Beginner?"}
               </Link>
             </div>
           </>
@@ -419,6 +571,31 @@ export default function HiraganaQuiz() {
           </div>
         ))}
       </div>
+
+      <div
+        className={`fixed inset-0 z-30 bg-black/60 transition-opacity duration-300 ${
+          activePanel ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setActivePanel(null)}
+      />
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-[440px] max-w-[90vw] border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          activePanel ? "translate-x-0" : "pointer-events-none translate-x-full"
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          aria-label="Close panel"
+          onClick={() => setActivePanel(null)}
+          className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+        >
+          ✕
+        </button>
+        {activePanel === "leaderboard" && <LeaderboardPanel />}
+        {activePanel === "stats" && (
+          <StatsPanel charStats={charStats} script={statsScript} onScriptChange={setStatsScript} />
+        )}
+      </div>
     </div>
   );
 }
@@ -428,6 +605,89 @@ function Stat({ value, label }: { value: string | number; label: string }) {
     <div className="flex flex-col items-center gap-1">
       <span className="text-3xl font-semibold text-zinc-50">{value}</span>
       <span className="text-[10px] tracking-widest text-zinc-600 uppercase">{label}</span>
+    </div>
+  );
+}
+
+function LeaderboardPanel() {
+  return (
+    <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
+      <h2 className="mb-6 text-sm text-zinc-200">leaderboard</h2>
+      <div className="flex flex-1 items-center justify-center text-center text-xs text-zinc-600">
+        No scores yet — be the first to set a record!
+      </div>
+    </div>
+  );
+}
+
+function StatsPanel({
+  charStats,
+  script,
+  onScriptChange,
+}: {
+  charStats: Record<string, CharStat>;
+  script: Script;
+  onScriptChange: (s: Script) => void;
+}) {
+  const source = script === "hiragana" ? HIRAGANA : KATAKANA;
+  const masteredCount = source.filter((k) => getMastery(charStats[k.char]) === "mastered").length;
+
+  return (
+    <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
+      <div className="mb-6 flex items-center justify-between pr-6">
+        <h2 className="text-sm text-zinc-200">gojūon progress</h2>
+        <span className="text-sm text-zinc-500">
+          {masteredCount} / {source.length}
+        </span>
+      </div>
+
+      <div className="flex gap-6">
+        <div className="grid grid-cols-5 content-start gap-2">
+          {GOJUON_ROWS.flatMap((row, ri) =>
+            row.map((idx, ci) =>
+              idx === null ? (
+                <div key={`${ri}-${ci}`} className="h-10 w-10" />
+              ) : (
+                <div
+                  key={`${ri}-${ci}`}
+                  className={`flex h-10 w-10 items-center justify-center rounded-lg border text-base ${masteryClasses(
+                    getMastery(charStats[source[idx].char])
+                  )}`}
+                >
+                  {source[idx].char}
+                </div>
+              )
+            )
+          )}
+        </div>
+
+        <div className="flex w-28 shrink-0 flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            {(["hiragana", "katakana"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => onScriptChange(s)}
+                className={`rounded-md border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                  s === script
+                    ? "border-green-800/60 bg-green-950/30 text-green-400"
+                    : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2 text-xs text-zinc-400">
+            {MASTERY_LEGEND.map((l) => (
+              <div key={l.key} className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${l.dot}`} />
+                {l.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
