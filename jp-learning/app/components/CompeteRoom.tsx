@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { HIRAGANA, KATAKANA, GOJUON_ROWS, type KanaEntry } from "@/app/lib/kana";
-import { isDead, isSettled, MIN_CHARS_BEFORE_WRONG, playSound, formatDuration } from "@/app/lib/kana-input";
+import {
+  isDead,
+  isSettled,
+  MIN_CHARS_BEFORE_WRONG,
+  NAME_MAX_LENGTH,
+  nameTextClass,
+  playSound,
+  formatDuration,
+} from "@/app/lib/kana-input";
 import {
   supabase,
   LEADERBOARD_SIZE,
@@ -13,6 +21,7 @@ import {
   type LeaderboardEntry,
 } from "@/app/lib/supabase";
 import { isInappropriateName } from "@/app/lib/name-filter";
+import { useResizablePanel } from "@/app/lib/use-resizable-panel";
 
 type Script = "hiragana" | "katakana";
 type Result = "correct" | "wrong";
@@ -83,6 +92,9 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const startTimeRef = useRef(Date.now());
   const itemStartRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const statsWidth = useResizablePanel(480);
+  const leaderboardWidth = useResizablePanel(480);
 
   const startRun = useCallback(() => {
     const shuffled = shuffle(pool);
@@ -238,7 +250,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     }
     setNameError(null);
     setSubmitting(true);
-    const { data, error } = await submitScore(trimmed.slice(0, 24), finalTimeMs, kanaType);
+    const { data, error } = await submitScore(trimmed.slice(0, NAME_MAX_LENGTH), finalTimeMs, kanaType);
     setSubmitting(false);
     if (error) {
       setSubmitError(true);
@@ -377,7 +389,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
 
         {!finished && current ? (
           <>
-            <div className="flex items-center justify-center gap-14 sm:gap-24">
+            <div className="flex items-center justify-center gap-8 sm:gap-12">
               <div className="flex h-20 w-20 items-center justify-center" />
 
               <div className="flex h-56 w-56 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-72 sm:w-72">
@@ -395,7 +407,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
                 {queue[0] && (
                   <div
                     key={queue[0].char}
-                    className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-4xl text-zinc-600 opacity-50 ${
+                    className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-5xl text-zinc-600 opacity-50 ${
                       skipAnimation ? "" : "animate-kana-pop"
                     }`}
                   >
@@ -454,9 +466,11 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="your name"
-                  maxLength={24}
+                  maxLength={NAME_MAX_LENGTH}
                   autoFocus
-                  className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                  className={`rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 ${nameTextClass(
+                    name.length
+                  )} text-zinc-100 outline-none focus:border-zinc-600`}
                 />
                 {nameError && <div className="text-xs text-red-400">{nameError}</div>}
                 <div className="flex gap-2">
@@ -500,10 +514,15 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
         </div>
 
         <div
-          className={`absolute inset-y-0 left-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          style={{ width: statsWidth.width, maxWidth: "90vw" }}
+          className={`absolute inset-y-0 left-0 z-10 overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
             statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
           }`}
         >
+          <div
+            onMouseDown={statsWidth.startDrag("left")}
+            className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize hover:bg-zinc-700/60"
+          />
           <button
             aria-label="Close stats"
             onClick={() => setStatsOpen(false)}
@@ -515,10 +534,15 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
         </div>
 
         <div
-          className={`absolute inset-y-0 right-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          style={{ width: leaderboardWidth.width, maxWidth: "90vw" }}
+          className={`absolute inset-y-0 right-0 z-10 overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
             leaderboardOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
           }`}
         >
+          <div
+            onMouseDown={leaderboardWidth.startDrag("right")}
+            className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-zinc-700/60"
+          />
           <button
             aria-label="Close leaderboard"
             onClick={() => setLeaderboardOpen(false)}
@@ -705,7 +729,7 @@ function CompeteLeaderboardPanel({ kanaType, refreshKey }: { kanaType: KanaType;
             >
               <span className="flex items-center gap-3">
                 <span className="w-5 text-zinc-500">{i + 1}</span>
-                <span className="text-zinc-200">{entry.name}</span>
+                <span className={`${nameTextClass(entry.name.length)} text-zinc-200`}>{entry.name}</span>
               </span>
               <span className="flex items-center gap-3">
                 <span className="text-zinc-400">{formatDuration(entry.time)}</span>

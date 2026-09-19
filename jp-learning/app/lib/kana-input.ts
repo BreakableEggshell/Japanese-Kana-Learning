@@ -1,4 +1,13 @@
 export const MIN_CHARS_BEFORE_WRONG = 2;
+export const NAME_MAX_LENGTH = 25;
+
+// Scales text size down for long leaderboard names instead of truncating
+// or letting them wrap/overflow.
+export function nameTextClass(length: number) {
+  if (length > 20) return "text-[11px]";
+  if (length > 14) return "text-xs";
+  return "text-sm";
+}
 
 // True once no valid answer can still start with this input.
 export function isDead(input: string, answers: string[]) {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { HIRAGANA, KATAKANA, GOJUON_ROWS, type KanaEntry } from "@/app/lib/kana";
 import { isDead, isSettled, MIN_CHARS_BEFORE_WRONG, playSound } from "@/app/lib/kana-input";
+import { useResizablePanel } from "@/app/lib/use-resizable-panel";
 
 type Mode = "hiragana" | "katakana" | "mixed";
 type Script = "hiragana" | "katakana";
@@ -140,6 +141,9 @@ export default function BeginnerQuiz() {
   const pauseStartRef = useRef<number | null>(null);
   const itemWasIdleRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const statsWidth = useResizablePanel(480);
+  const menuWidth = useResizablePanel(480);
 
   const resetSession = useCallback((pool: KanaEntry[]) => {
     if (pool.length === 0) return;
@@ -308,16 +312,18 @@ export default function BeginnerQuiz() {
     });
   }
 
+  // Only touch the script(s) actually shown in the kana menu for the
+  // current mode — hiragana-only when practicing hiragana, etc.
   function checkAll() {
-    setHiraganaRows(GOJUON_ROWS.map(() => true));
-    setKatakanaRows(GOJUON_ROWS.map(() => true));
+    if (mode !== "katakana") setHiraganaRows(GOJUON_ROWS.map(() => true));
+    if (mode !== "hiragana") setKatakanaRows(GOJUON_ROWS.map(() => true));
   }
 
   // "Check none" can't leave zero rows selected, so it falls back to the
   // same single-row default the page starts with.
   function checkNone() {
-    setHiraganaRows(defaultRows());
-    setKatakanaRows(defaultRows());
+    if (mode !== "katakana") setHiraganaRows(defaultRows());
+    if (mode !== "hiragana") setKatakanaRows(defaultRows());
   }
 
   const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 100;
@@ -455,12 +461,12 @@ export default function BeginnerQuiz() {
       <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4">
         {current && next && (
           <>
-            <div className="flex items-center justify-center gap-14 sm:gap-24">
+            <div className="flex items-center justify-center gap-8 sm:gap-12">
               <div className="flex h-20 w-20 items-center justify-center">
                 {prevItem && (
                   <div
                     key={prevItem.key}
-                    className={`flex h-16 w-16 -rotate-12 items-center justify-center rounded-xl border text-4xl text-zinc-500 ${
+                    className={`flex h-16 w-16 -rotate-12 items-center justify-center rounded-xl border text-5xl text-zinc-500 ${
                       skipAnimation ? "" : "animate-kana-settle"
                     } ${
                       prevItem.result === "correct"
@@ -491,7 +497,7 @@ export default function BeginnerQuiz() {
               <div className="flex h-20 w-20 items-center justify-center">
                 <div
                   key={`${next.char}-${seenCount}`}
-                  className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-4xl text-zinc-600 opacity-50 ${
+                  className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-5xl text-zinc-600 opacity-50 ${
                     skipAnimation ? "" : "animate-kana-pop"
                   }`}
                 >
@@ -552,10 +558,15 @@ export default function BeginnerQuiz() {
         )}
 
         <div
-          className={`absolute inset-y-0 left-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          style={{ width: statsWidth.width, maxWidth: "90vw" }}
+          className={`absolute inset-y-0 left-0 z-10 overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
             statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
           }`}
         >
+          <div
+            onMouseDown={statsWidth.startDrag("left")}
+            className="absolute inset-y-0 right-0 z-20 w-1.5 cursor-col-resize hover:bg-zinc-700/60"
+          />
           <button
             aria-label="Close stats"
             onClick={() => setStatsOpen(false)}
@@ -567,10 +578,15 @@ export default function BeginnerQuiz() {
         </div>
 
         <div
-          className={`absolute inset-y-0 right-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+          style={{ width: menuWidth.width, maxWidth: "90vw" }}
+          className={`absolute inset-y-0 right-0 z-10 overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
             menuOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
           }`}
         >
+          <div
+            onMouseDown={menuWidth.startDrag("right")}
+            className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-zinc-700/60"
+          />
           <button
             aria-label="Close kana menu"
             onClick={() => setMenuOpen(false)}
@@ -579,6 +595,7 @@ export default function BeginnerQuiz() {
             ✕
           </button>
           <KanaMenuPanel
+            mode={mode}
             hiraganaRows={hiraganaRows}
             katakanaRows={katakanaRows}
             onToggleRow={toggleRow}
@@ -703,12 +720,14 @@ function StatsPanel({
 }
 
 function KanaMenuPanel({
+  mode,
   hiraganaRows,
   katakanaRows,
   onToggleRow,
   onCheckAll,
   onCheckNone,
 }: {
+  mode: Mode;
   hiraganaRows: boolean[];
   katakanaRows: boolean[];
   onToggleRow: (s: Script, rowIndex: number) => void;
@@ -738,8 +757,12 @@ function KanaMenuPanel({
         </div>
 
         <div className="flex flex-col gap-6">
-          <KanaRowGrid script="hiragana" source={HIRAGANA} rows={hiraganaRows} onToggleRow={onToggleRow} />
-          <KanaRowGrid script="katakana" source={KATAKANA} rows={katakanaRows} onToggleRow={onToggleRow} />
+          {mode !== "katakana" && (
+            <KanaRowGrid script="hiragana" source={HIRAGANA} rows={hiraganaRows} onToggleRow={onToggleRow} />
+          )}
+          {mode !== "hiragana" && (
+            <KanaRowGrid script="katakana" source={KATAKANA} rows={katakanaRows} onToggleRow={onToggleRow} />
+          )}
         </div>
       </div>
     </div>
