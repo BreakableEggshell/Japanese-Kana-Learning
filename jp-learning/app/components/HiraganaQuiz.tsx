@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { HIRAGANA, KATAKANA, type KanaEntry } from "@/app/lib/kana";
-import { supabase, type LeaderboardEntry } from "@/app/lib/supabase";
+import { HIRAGANA, KATAKANA, GOJUON_ROWS, type KanaEntry } from "@/app/lib/kana";
+import { isDead, isSettled, MIN_CHARS_BEFORE_WRONG, playSound, formatDuration } from "@/app/lib/kana-input";
+import { supabase, LEADERBOARD_SIZE, type LeaderboardEntry } from "@/app/lib/supabase";
 
 type Mode = "hiragana" | "katakana" | "mixed";
 type Script = "hiragana" | "katakana";
@@ -37,26 +38,10 @@ const POOLS: Record<Mode, KanaEntry[]> = {
 
 const MODES: Mode[] = ["hiragana", "katakana", "mixed"];
 const REVEAL_DELAY_MS = 500;
-const MIN_CHARS_BEFORE_WRONG = 2;
 const IDLE_PAUSE_MS = 10000;
 const EARLY_ATTEMPTS_THRESHOLD = 8;
 const BEGINNER_GLOW_MS = 5000;
 const BUG_REPORT_URL = "https://github.com/BreakableEggshell/Japanese-Kana-Learning/issues";
-
-// Gojūon table laid out as index positions into HIRAGANA/KATAKANA (both share the same order).
-const GOJUON_ROWS: (number | null)[][] = [
-  [0, 1, 2, 3, 4],
-  [5, 6, 7, 8, 9],
-  [10, 11, 12, 13, 14],
-  [15, 16, 17, 18, 19],
-  [20, 21, 22, 23, 24],
-  [25, 26, 27, 28, 29],
-  [30, 31, 32, 33, 34],
-  [35, null, 36, null, 37],
-  [38, 39, 40, 41, 42],
-  [43, null, null, null, 44],
-  [45, null, null, null, null],
-];
 
 const MASTERY_LEGEND: { key: Mastery; label: string; dot: string }[] = [
   { key: "mastered", label: "mastered", dot: "bg-green-500" },
@@ -80,17 +65,6 @@ function formatTime(totalSeconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-// True once no valid answer can still start with this input.
-function isDead(input: string, answers: string[]) {
-  return !answers.some((a) => a.startsWith(input));
-}
-
-// True once input exactly matches an answer that no longer answer extends.
-function isSettled(input: string, answers: string[]) {
-  if (!answers.includes(input)) return false;
-  return !answers.some((a) => a !== input && a.length > input.length && a.startsWith(input));
-}
-
 function getMastery(stat: CharStat | undefined): Mastery {
   if (!stat || stat.attempts === 0) return "not-started";
   if (stat.correctStreak >= 3) return "mastered";
@@ -111,17 +85,13 @@ function masteryClasses(m: Mastery) {
   }
 }
 
-function playSound(src: string) {
-  const audio = new Audio(src);
-  audio.play().catch(() => {});
-}
-
 let keySeq = 0;
 const nextKey = () => keySeq++;
 
 export default function HiraganaQuiz() {
   const [mode, setMode] = useState<Mode>("hiragana");
   const [skipAnimation, setSkipAnimation] = useState(false);
+  const [muted, setMuted] = useState(false);
 
   const [current, setCurrent] = useState<KanaEntry | null>(null);
   const [next, setNext] = useState<KanaEntry | null>(null);
@@ -240,10 +210,10 @@ export default function HiraganaQuiz() {
           setCorrectCount((c) => c + 1);
           setStreak((s) => s + 1);
           setTotalCorrectChars((c) => c + current.answers[0].length);
-          playSound("/correct.mp3");
+          playSound("/correct.mp3", muted);
         } else {
           setStreak(0);
-          playSound("/wrong.mp3");
+          playSound("/wrong.mp3", muted);
         }
         setPrevItem({ key: nextKey(), char: current.char, result });
 
@@ -277,7 +247,7 @@ export default function HiraganaQuiz() {
       setRevealed(false);
       itemStartRef.current = Date.now();
     },
-    [current, next, mode]
+    [current, next, mode, muted]
   );
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -333,7 +303,7 @@ export default function HiraganaQuiz() {
       }}
     >
       <header className="grid grid-cols-3 items-start px-8 py-6">
-        <div className="text-base text-zinc-300">
+        <div className="text-lg text-zinc-300">
           kana<span className="text-zinc-600">.</span>drill
         </div>
 
@@ -361,20 +331,8 @@ export default function HiraganaQuiz() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setLeaderboardOpen((o) => !o);
-              }}
-              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
-                leaderboardOpen
-                  ? "border-green-800/60 bg-green-950/30 text-green-400"
-                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              leaderboard
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
                 setStatsOpen((o) => !o);
+                inputRef.current?.focus();
               }}
               className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
                 statsOpen
@@ -383,6 +341,20 @@ export default function HiraganaQuiz() {
               }`}
             >
               stats
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLeaderboardOpen((o) => !o);
+                inputRef.current?.focus();
+              }}
+              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                leaderboardOpen
+                  ? "border-green-800/60 bg-green-950/30 text-green-400"
+                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              leaderboard
             </button>
 
             <div className="relative">
@@ -416,6 +388,15 @@ export default function HiraganaQuiz() {
                     />
                     disable animation
                   </label>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-zinc-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={muted}
+                      onChange={(e) => setMuted(e.target.checked)}
+                      className="accent-green-500"
+                    />
+                    mute audio
+                  </label>
                   <a
                     href={BUG_REPORT_URL}
                     target="_blank"
@@ -430,7 +411,7 @@ export default function HiraganaQuiz() {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 text-base text-zinc-400">
+        <div className="flex items-center justify-end gap-3 text-lg text-zinc-400">
           <span>{formatTime(elapsedSeconds)}</span>
           <button
             aria-label="Reset session"
@@ -439,7 +420,7 @@ export default function HiraganaQuiz() {
               e.stopPropagation();
               resetSession(mode);
             }}
-            className="text-zinc-500 transition-colors hover:text-zinc-300"
+            className="text-2xl text-zinc-500 transition-colors hover:text-zinc-300"
           >
             ↻
           </button>
@@ -576,7 +557,7 @@ export default function HiraganaQuiz() {
           >
             ✕
           </button>
-          <LeaderboardPanel />
+          <LeaderboardPanel mode={mode} />
         </div>
       </main>
 
@@ -619,19 +600,23 @@ function Stat({ value, label }: { value: string | number; label: string }) {
   );
 }
 
-function LeaderboardPanel() {
+function LeaderboardPanel({ mode }: { mode: Mode }) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(false);
 
     supabase
-      .from("leaderboard")
+      .from("kana_comp")
       .select("*")
+      .eq("kana_type", mode)
+      .eq("ld_placer", true)
       .order("time", { ascending: true })
-      .limit(20)
+      .limit(LEADERBOARD_SIZE)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error) {
@@ -645,11 +630,19 @@ function LeaderboardPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mode]);
 
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
-      <h2 className="mb-6 text-lg text-zinc-200">leaderboard</h2>
+      <h2 className="mb-4 text-lg text-zinc-200">{mode} leaderboard</h2>
+
+      <Link
+        href={`/compete/${mode}`}
+        onClick={(e) => e.stopPropagation()}
+        className="mb-6 rounded-md border border-green-800/60 bg-green-950/30 px-3 py-1.5 text-center text-sm text-green-400 transition-colors hover:bg-green-950/50"
+      >
+        compete
+      </Link>
 
       {loading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">loading…</div>
@@ -672,7 +665,12 @@ function LeaderboardPanel() {
                 <span className="w-5 text-zinc-500">{i + 1}</span>
                 <span className="text-zinc-200">{entry.name}</span>
               </span>
-              <span className="text-zinc-400">{entry.time.toFixed(1)}s</span>
+              <span className="flex items-center gap-3">
+                <span className="text-zinc-400">{formatDuration(entry.time)}</span>
+                <span className="text-xs text-zinc-600">
+                  {new Date(entry.created_at).toLocaleDateString()}
+                </span>
+              </span>
             </li>
           ))}
         </ol>

@@ -1,0 +1,519 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { HIRAGANA, KATAKANA, GOJUON_ROWS, type KanaEntry } from "@/app/lib/kana";
+import { isDead, isSettled, MIN_CHARS_BEFORE_WRONG, playSound, formatDuration } from "@/app/lib/kana-input";
+import { LEADERBOARD_SIZE, estimatePlacement, submitScore, type KanaType } from "@/app/lib/supabase";
+import { isInappropriateName } from "@/app/lib/name-filter";
+
+type Script = "hiragana" | "katakana";
+type Result = "correct" | "wrong";
+
+const POOLS: Record<KanaType, KanaEntry[]> = {
+  hiragana: HIRAGANA,
+  katakana: KATAKANA,
+  mixed: [...HIRAGANA, ...KATAKANA],
+};
+
+function shuffle<T>(arr: T[]): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
+  const pool = POOLS[kanaType];
+
+  const [current, setCurrent] = useState<KanaEntry | null>(null);
+  const [queue, setQueue] = useState<KanaEntry[]>([]);
+  const [input, setInput] = useState("");
+
+  const [charResult, setCharResult] = useState<Record<string, Result>>({});
+  const [correctCount, setCorrectCount] = useState(0);
+  const [wrongCount, setWrongCount] = useState(0);
+
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [finished, setFinished] = useState(false);
+  const [finalTimeMs, setFinalTimeMs] = useState(0);
+
+  const [skipAnimation, setSkipAnimation] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [resetOnMistake, setResetOnMistake] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [statsScript, setStatsScript] = useState<Script>(kanaType === "katakana" ? "katakana" : "hiragana");
+
+  const [qualifyingPlace, setQualifyingPlace] = useState<number | null>(null);
+  const [showCongrats, setShowCongrats] = useState(false);
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
+  const [finalPlacement, setFinalPlacement] = useState<number | null>(null);
+
+  const startTimeRef = useRef(Date.now());
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const startRun = useCallback(() => {
+    const shuffled = shuffle(pool);
+    setCurrent(shuffled[0] ?? null);
+    setQueue(shuffled.slice(1));
+    setInput("");
+    setCharResult({});
+    setCorrectCount(0);
+    setWrongCount(0);
+    setElapsedMs(0);
+    setFinished(false);
+    setFinalTimeMs(0);
+    setQualifyingPlace(null);
+    setShowCongrats(false);
+    setName("");
+    setNameError(null);
+    setSubmitted(false);
+    setSubmitError(false);
+    setFinalPlacement(null);
+    startTimeRef.current = Date.now();
+    setRunning(true);
+  }, [pool]);
+
+  useEffect(() => {
+    startRun();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setElapsedMs(Date.now() - startTimeRef.current);
+    }, 31);
+    return () => clearInterval(id);
+  }, [running]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, [current, finished]);
+
+  useEffect(() => {
+    if (!finished) return;
+    let cancelled = false;
+    estimatePlacement(finalTimeMs, kanaType).then((place) => {
+      if (cancelled || place === null) return;
+      if (place <= LEADERBOARD_SIZE) {
+        setQualifyingPlace(place);
+        setShowCongrats(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [finished, finalTimeMs, kanaType]);
+
+  const finishRun = useCallback(() => {
+    const total = Date.now() - startTimeRef.current;
+    setElapsedMs(total);
+    setFinalTimeMs(total);
+    setRunning(false);
+    setFinished(true);
+    setCurrent(null);
+  }, []);
+
+  const advance = useCallback(
+    (result: Result) => {
+      if (!current) return;
+      playSound(result === "correct" ? "/correct.mp3" : "/wrong.mp3", muted);
+
+      if (result === "correct") {
+        setCorrectCount((c) => c + 1);
+      } else {
+        setWrongCount((c) => c + 1);
+      }
+      setCharResult((prev) => ({ ...prev, [current.char]: result }));
+
+      if (resetOnMistake && result === "wrong") {
+        startRun();
+        return;
+      }
+
+      const nextQueue = result === "wrong" ? [...queue, current] : queue;
+      if (nextQueue.length === 0) {
+        finishRun();
+        return;
+      }
+      const [head, ...rest] = nextQueue;
+      setCurrent(head);
+      setQueue(rest);
+      setInput("");
+    },
+    [current, queue, muted, resetOnMistake, startRun, finishRun]
+  );
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!current) return;
+    const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, "");
+    setInput(raw);
+    if (!raw) return;
+
+    if (isSettled(raw, current.answers)) {
+      advance("correct");
+    } else if (raw.length >= MIN_CHARS_BEFORE_WRONG && isDead(raw, current.answers)) {
+      advance("wrong");
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!current) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (!input.trim()) return;
+      const isCorrect = current.answers.includes(input);
+      advance(isCorrect ? "correct" : "wrong");
+    }
+  }
+
+  async function handleConfirmName(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setNameError("enter a name");
+      return;
+    }
+    if (isInappropriateName(trimmed)) {
+      setNameError("please choose an appropriate name");
+      return;
+    }
+    setNameError(null);
+    setSubmitting(true);
+    const { data, error } = await submitScore(trimmed.slice(0, 24), finalTimeMs, kanaType);
+    setSubmitting(false);
+    if (error) {
+      setSubmitError(true);
+      return;
+    }
+    setFinalPlacement(typeof data === "number" ? data : qualifyingPlace);
+    setSubmitted(true);
+    setShowCongrats(false);
+  }
+
+  function handleCancelPopup() {
+    setShowCongrats(false);
+  }
+
+  return (
+    <div
+      className="flex min-h-screen w-full flex-col bg-black font-mono text-zinc-50"
+      onClick={() => {
+        inputRef.current?.focus();
+        setOptionsOpen(false);
+      }}
+    >
+      <header className="grid grid-cols-3 items-start px-8 py-6">
+        <div className="text-lg text-zinc-300">
+          kana<span className="text-zinc-600">.</span>drill
+        </div>
+
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex justify-center gap-2">
+            <span className="rounded-md border border-green-800/60 bg-green-950/30 px-3 py-1.5 text-base text-green-400">
+              {kanaType}
+            </span>
+          </div>
+
+          <div className="flex justify-center gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setStatsOpen((o) => !o);
+                inputRef.current?.focus();
+              }}
+              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                statsOpen
+                  ? "border-green-800/60 bg-green-950/30 text-green-400"
+                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              stats
+            </button>
+
+            <div className="relative">
+              <button
+                aria-label="Options"
+                title="Options"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOptionsOpen((o) => !o);
+                }}
+                className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                  optionsOpen
+                    ? "border-green-800/60 bg-green-950/30 text-green-400"
+                    : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                ⚙
+              </button>
+
+              {optionsOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-full right-0 z-50 mt-2 w-56 rounded-md border border-zinc-800 bg-zinc-950 p-3 shadow-xl"
+                >
+                  <label className="flex items-center gap-2 text-sm text-zinc-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={skipAnimation}
+                      onChange={(e) => setSkipAnimation(e.target.checked)}
+                      className="accent-green-500"
+                    />
+                    disable animation
+                  </label>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-zinc-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={muted}
+                      onChange={(e) => setMuted(e.target.checked)}
+                      className="accent-green-500"
+                    />
+                    mute audio
+                  </label>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-zinc-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={resetOnMistake}
+                      onChange={(e) => setResetOnMistake(e.target.checked)}
+                      className="accent-green-500"
+                    />
+                    reset on mistake
+                  </label>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div />
+      </header>
+
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-4">
+        <div className="text-2xl text-zinc-300 tabular-nums">{formatDuration(elapsedMs)}</div>
+
+        {!finished && current ? (
+          <>
+            <div className="flex items-center justify-center gap-14 sm:gap-24">
+              <div className="flex h-20 w-20 items-center justify-center" />
+
+              <div className="flex h-56 w-56 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-72 sm:w-72">
+                <span
+                  key={current.char}
+                  className={`text-7xl font-medium select-none sm:text-8xl ${
+                    skipAnimation ? "" : "animate-kana-grow-shrink"
+                  }`}
+                >
+                  {current.char}
+                </span>
+              </div>
+
+              <div className="flex h-20 w-20 items-center justify-center">
+                {queue[0] && (
+                  <div
+                    key={queue[0].char}
+                    className={`flex h-16 w-16 rotate-12 items-center justify-center rounded-xl text-4xl text-zinc-600 opacity-50 ${
+                      skipAnimation ? "" : "animate-kana-pop"
+                    }`}
+                  >
+                    {queue[0].char}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="relative flex items-center justify-center border-b border-zinc-800 pb-2">
+              <div className="flex min-h-9 min-w-[3ch] items-center text-2xl">
+                <span className="text-white">{input}</span>
+                <span className="ml-0.5 h-6 w-2.5 animate-blink bg-white" />
+              </div>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Romaji input"
+                className="absolute inset-0 h-full w-full cursor-default opacity-0"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-green-800/60 bg-green-950/10 px-8 py-10 text-center">
+            <div className="text-lg text-green-400">finished!</div>
+            <div className="text-4xl text-zinc-50">{formatDuration(finalTimeMs)}</div>
+            <div className="text-sm text-zinc-500">
+              {correctCount} correct · {wrongCount} wrong
+            </div>
+
+            {submitted && (
+              <div className="mt-2 text-sm text-green-400">
+                you&apos;re #{finalPlacement} on the leaderboard!
+              </div>
+            )}
+            {submitError && (
+              <div className="mt-2 text-sm text-red-400">couldn&apos;t submit your score — try again</div>
+            )}
+          </div>
+        )}
+
+        {showCongrats && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full max-w-sm rounded-2xl border border-green-800/60 bg-zinc-950 p-6 text-center">
+              <div className="text-lg text-green-400">おめでとう！you reached #{qualifyingPlace}!</div>
+              <form onSubmit={handleConfirmName} className="mt-4 flex flex-col gap-3">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="your name"
+                  maxLength={24}
+                  autoFocus
+                  className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
+                />
+                {nameError && <div className="text-xs text-red-400">{nameError}</div>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCancelPopup}
+                    className="flex-1 rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-200"
+                  >
+                    cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="flex-1 rounded-md border border-green-800/60 bg-green-950/30 px-3 py-1.5 text-sm text-green-400 transition-colors hover:bg-green-950/50 disabled:opacity-40"
+                  >
+                    {submitting ? "..." : "submit"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-md border border-red-800/60 bg-red-950/30 px-4 py-1.5 text-sm text-red-400 transition-colors hover:bg-red-950/50"
+          >
+            exit
+          </Link>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              startRun();
+            }}
+            className="rounded-md border border-green-800/60 bg-green-950/30 px-4 py-1.5 text-sm text-green-400 transition-colors hover:bg-green-950/50"
+          >
+            retry
+          </button>
+        </div>
+
+        <div
+          className={`absolute inset-y-0 left-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-r border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+            statsOpen ? "translate-x-0" : "pointer-events-none -translate-x-full"
+          }`}
+        >
+          <button
+            aria-label="Close stats"
+            onClick={() => setStatsOpen(false)}
+            className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            ✕
+          </button>
+          <CompeteStatsPanel charResult={charResult} script={statsScript} onScriptChange={setStatsScript} />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function CompeteStatsPanel({
+  charResult,
+  script,
+  onScriptChange,
+}: {
+  charResult: Record<string, Result>;
+  script: Script;
+  onScriptChange: (s: Script) => void;
+}) {
+  const source = script === "hiragana" ? HIRAGANA : KATAKANA;
+
+  function cellClasses(result: Result | undefined) {
+    if (result === "correct") return "border-green-800/60 bg-green-950/40 text-green-400";
+    if (result === "wrong") return "border-red-800/60 bg-red-950/40 text-red-400";
+    return "border-zinc-800 bg-zinc-900/40 text-zinc-600";
+  }
+
+  return (
+    <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
+      <h2 className="mb-6 text-lg text-zinc-200">gojūon progress</h2>
+
+      <div className="flex gap-6">
+        <div className="grid grid-cols-5 content-start gap-2">
+          {GOJUON_ROWS.flatMap((row, ri) =>
+            row.map((idx, ci) =>
+              idx === null ? (
+                <div key={`${ri}-${ci}`} className="h-11 w-11" />
+              ) : (
+                <div
+                  key={`${ri}-${ci}`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${cellClasses(
+                    charResult[source[idx].char]
+                  )}`}
+                >
+                  {source[idx].char}
+                </div>
+              )
+            )
+          )}
+        </div>
+
+        <div className="flex w-32 shrink-0 flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            {(["hiragana", "katakana"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => onScriptChange(s)}
+                className={`rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
+                  s === script
+                    ? "border-green-800/60 bg-green-950/30 text-green-400"
+                    : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2 text-sm text-zinc-400">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500" />
+              correct
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-red-400" />
+              wrong
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
