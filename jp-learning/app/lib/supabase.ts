@@ -16,16 +16,18 @@ export type LeaderboardEntry = {
   created_at: string;
   kana_type: KanaType;
   ld_placer: boolean;
+  comment: string | null;
 };
 
 // Inserts a new score and re-ranks the leaderboard for that kana type,
 // demoting anything that fell outside the top LEADERBOARD_SIZE (see submit_score() in Supabase).
 // Returns the new entry's placement (1-indexed), or null if it didn't rank at all.
-export async function submitScore(name: string, timeMs: number, kanaType: KanaType) {
+export async function submitScore(name: string, timeMs: number, kanaType: KanaType, comment: string) {
   return supabase.rpc("submit_score", {
     p_name: name,
     p_time: timeMs,
     p_kana_type: kanaType,
+    p_comment: comment || null,
   });
 }
 

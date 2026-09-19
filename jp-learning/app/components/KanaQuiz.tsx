@@ -41,8 +41,8 @@ const MODES: Mode[] = ["hiragana", "katakana", "mixed"];
 const REVEAL_DELAY_MS = 500;
 const IDLE_PAUSE_MS = 30000;
 const LEADERBOARD_REFRESH_MS = 30000;
-const EARLY_ATTEMPTS_THRESHOLD = 8;
-const BEGINNER_GLOW_MS = 5000;
+const WRONG_STREAK_THRESHOLD = 8;
+const PRACTICE_GLOW_MS = 5000;
 
 const MASTERY_LEGEND: { key: Mastery; label: string; dot: string }[] = [
   { key: "mastered", label: "mastered", dot: "bg-green-500" },
@@ -119,15 +119,15 @@ export default function KanaQuiz() {
   const [statsScript, setStatsScript] = useState<Script>("hiragana");
   const [optionsOpen, setOptionsOpen] = useState(false);
 
-  const [beginnerStruggling, setBeginnerStruggling] = useState(false);
-  const [beginnerGlow, setBeginnerGlow] = useState(false);
+  const [practiceStruggling, setPracticeStruggling] = useState(false);
+  const [practiceGlow, setPracticeGlow] = useState(false);
 
   const startTimeRef = useRef(Date.now());
   const itemStartRef = useRef(Date.now());
   const lastActivityRef = useRef(Date.now());
   const pauseStartRef = useRef<number | null>(null);
   const itemWasIdleRef = useRef(false);
-  const earlyAttemptsRef = useRef<boolean[]>([]);
+  const wrongStreakRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const statsWidth = useResizablePanel(480);
@@ -156,6 +156,7 @@ export default function KanaQuiz() {
     lastActivityRef.current = Date.now();
     pauseStartRef.current = null;
     itemWasIdleRef.current = false;
+    wrongStreakRef.current = 0;
     setElapsedSeconds(0);
   }, []);
 
@@ -227,9 +228,17 @@ export default function KanaQuiz() {
           setStreak((s) => s + 1);
           setTotalCorrectChars((c) => c + current.answers[0].length);
           playSound("/correct.mp3", muted);
+          wrongStreakRef.current = 0;
         } else {
           setStreak(0);
           playSound("/wrong.mp3", muted);
+          wrongStreakRef.current += 1;
+          if (wrongStreakRef.current >= WRONG_STREAK_THRESHOLD) {
+            wrongStreakRef.current = 0;
+            setPracticeStruggling(true);
+            setPracticeGlow(true);
+            setTimeout(() => setPracticeGlow(false), PRACTICE_GLOW_MS);
+          }
         }
         setPrevItem({ key: nextKey(), char: current.char, result });
 
@@ -241,18 +250,6 @@ export default function KanaQuiz() {
               : { correctStreak: 0, wrongCount: s.wrongCount + 1, attempts: s.attempts + 1 };
           return { ...prev, [current.char]: nextStat };
         });
-
-        if (earlyAttemptsRef.current.length < EARLY_ATTEMPTS_THRESHOLD) {
-          earlyAttemptsRef.current = [...earlyAttemptsRef.current, result === "correct"];
-          if (
-            earlyAttemptsRef.current.length === EARLY_ATTEMPTS_THRESHOLD &&
-            earlyAttemptsRef.current.every((ok) => !ok)
-          ) {
-            setBeginnerStruggling(true);
-            setBeginnerGlow(true);
-            setTimeout(() => setBeginnerGlow(false), BEGINNER_GLOW_MS);
-          }
-        }
       } else {
         setPrevItem({ key: nextKey(), char: current.char });
       }
@@ -460,11 +457,11 @@ export default function KanaQuiz() {
               </div>
 
               <div
-                className={`flex h-56 w-56 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-72 sm:w-72 ${cardRing}`}
+                className={`flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-64 sm:w-64 ${cardRing}`}
               >
                 <span
                   key={`${current.char}-${seenCount}`}
-                  className={`text-7xl font-medium select-none sm:text-8xl ${
+                  className={`text-8xl font-medium select-none sm:text-9xl ${
                     skipAnimation ? "" : "animate-kana-grow-shrink"
                   }`}
                 >
@@ -527,13 +524,13 @@ export default function KanaQuiz() {
               </p>
 
               <Link
-                href="/beginner"
+                href="/practice"
                 onClick={(e) => e.stopPropagation()}
                 className={`rounded-md border px-3 py-1.5 text-sm text-zinc-500 transition-colors hover:border-zinc-700 hover:text-zinc-300 ${
-                  beginnerGlow ? "animate-beginner-glow" : "border-zinc-800"
+                  practiceGlow ? "animate-practice-glow" : "border-zinc-800"
                 }`}
               >
-                {beginnerStruggling ? "Beginner? Learn the basics here!" : "Beginner?"}
+                {practiceStruggling ? "Practice? Learn the basics here!" : "Practice?"}
               </Link>
             </div>
           </>
@@ -687,20 +684,24 @@ function LeaderboardPanel({ mode }: { mode: Mode }) {
       ) : (
         <ol className="flex flex-col gap-2">
           {entries.map((entry, i) => (
-            <li
-              key={entry.id}
-              className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-sm"
-            >
-              <span className="flex items-center gap-3">
-                <span className="w-5 text-zinc-500">{i + 1}</span>
-                <span className={`${nameTextClass(entry.name.length)} text-zinc-200`}>{entry.name}</span>
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="text-zinc-400">{formatDuration(entry.time)}</span>
-                <span className="text-xs text-zinc-600">
-                  {new Date(entry.created_at).toLocaleDateString()}
+            <li key={entry.id} className="rounded-md border border-zinc-800 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-3">
+                  <span className="w-5 text-zinc-500">{i + 1}</span>
+                  <span className={`${nameTextClass(entry.name.length)} text-zinc-200`}>{entry.name}</span>
                 </span>
-              </span>
+                <span className="flex items-center gap-3">
+                  <span className="text-zinc-400">{formatDuration(entry.time)}</span>
+                  <span className="text-xs text-zinc-600">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </span>
+                </span>
+              </div>
+              {entry.comment && (
+                <div className={`mt-1 pl-8 ${nameTextClass(entry.comment.length)} text-zinc-500 italic`}>
+                  {entry.comment}
+                </div>
+              )}
             </li>
           ))}
         </ol>

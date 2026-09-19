@@ -20,7 +20,7 @@ import {
   type KanaType,
   type LeaderboardEntry,
 } from "@/app/lib/supabase";
-import { isInappropriateName } from "@/app/lib/name-filter";
+import { isInappropriateName, isInappropriateComment } from "@/app/lib/name-filter";
 import { useResizablePanel } from "@/app/lib/use-resizable-panel";
 
 type Script = "hiragana" | "katakana";
@@ -83,7 +83,9 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const [qualifyingPlace, setQualifyingPlace] = useState<number | null>(null);
   const [showCongrats, setShowCongrats] = useState(false);
   const [name, setName] = useState("");
+  const [comment, setComment] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [commentError, setCommentError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState(false);
@@ -114,7 +116,9 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     setQualifyingPlace(null);
     setShowCongrats(false);
     setName("");
+    setComment("");
     setNameError(null);
+    setCommentError(null);
     setSubmitted(false);
     setSubmitError(false);
     setFinalPlacement(null);
@@ -240,6 +244,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   async function handleConfirmName(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
+    const trimmedComment = comment.trim();
     if (!trimmed) {
       setNameError("enter a name");
       return;
@@ -248,9 +253,19 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
       setNameError("please choose an appropriate name");
       return;
     }
+    if (isInappropriateComment(trimmedComment)) {
+      setCommentError("please choose an appropriate comment");
+      return;
+    }
     setNameError(null);
+    setCommentError(null);
     setSubmitting(true);
-    const { data, error } = await submitScore(trimmed.slice(0, NAME_MAX_LENGTH), finalTimeMs, kanaType);
+    const { data, error } = await submitScore(
+      trimmed.slice(0, NAME_MAX_LENGTH),
+      finalTimeMs,
+      kanaType,
+      trimmedComment.slice(0, NAME_MAX_LENGTH)
+    );
     setSubmitting(false);
     if (error) {
       setSubmitError(true);
@@ -392,10 +407,10 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
             <div className="flex items-center justify-center gap-8 sm:gap-12">
               <div className="flex h-20 w-20 items-center justify-center" />
 
-              <div className="flex h-56 w-56 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-72 sm:w-72">
+              <div className="flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-64 sm:w-64">
                 <span
                   key={current.char}
-                  className={`text-7xl font-medium select-none sm:text-8xl ${
+                  className={`text-8xl font-medium select-none sm:text-9xl ${
                     skipAnimation ? "" : "animate-kana-grow-shrink"
                   }`}
                 >
@@ -473,6 +488,16 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
                   )} text-zinc-100 outline-none focus:border-zinc-600`}
                 />
                 {nameError && <div className="text-xs text-red-400">{nameError}</div>}
+                <input
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="comment (optional)"
+                  maxLength={NAME_MAX_LENGTH}
+                  className={`rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 ${nameTextClass(
+                    comment.length
+                  )} text-zinc-100 outline-none focus:border-zinc-600`}
+                />
+                {commentError && <div className="text-xs text-red-400">{commentError}</div>}
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -723,20 +748,24 @@ function CompeteLeaderboardPanel({ kanaType, refreshKey }: { kanaType: KanaType;
       ) : (
         <ol className="flex flex-col gap-2">
           {entries.map((entry, i) => (
-            <li
-              key={entry.id}
-              className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-sm"
-            >
-              <span className="flex items-center gap-3">
-                <span className="w-5 text-zinc-500">{i + 1}</span>
-                <span className={`${nameTextClass(entry.name.length)} text-zinc-200`}>{entry.name}</span>
-              </span>
-              <span className="flex items-center gap-3">
-                <span className="text-zinc-400">{formatDuration(entry.time)}</span>
-                <span className="text-xs text-zinc-600">
-                  {new Date(entry.created_at).toLocaleDateString()}
+            <li key={entry.id} className="rounded-md border border-zinc-800 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-3">
+                  <span className="w-5 text-zinc-500">{i + 1}</span>
+                  <span className={`${nameTextClass(entry.name.length)} text-zinc-200`}>{entry.name}</span>
                 </span>
-              </span>
+                <span className="flex items-center gap-3">
+                  <span className="text-zinc-400">{formatDuration(entry.time)}</span>
+                  <span className="text-xs text-zinc-600">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </span>
+                </span>
+              </div>
+              {entry.comment && (
+                <div className={`mt-1 pl-8 ${nameTextClass(entry.comment.length)} text-zinc-500 italic`}>
+                  {entry.comment}
+                </div>
+              )}
             </li>
           ))}
         </ol>
