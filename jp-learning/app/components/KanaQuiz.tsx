@@ -433,7 +433,7 @@ export default function KanaQuiz() {
         </div>
       </header>
 
-      <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4">
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4 pb-8">
         {current && next && (
           <>
             <div className="flex items-center justify-center gap-8 sm:gap-12">
@@ -457,7 +457,7 @@ export default function KanaQuiz() {
               </div>
 
               <div
-                className={`flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-64 sm:w-64 ${cardRing}`}
+                className={`flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-48 sm:w-48 ${cardRing}`}
               >
                 <span
                   key={`${current.char}-${seenCount}`}
@@ -577,7 +577,7 @@ export default function KanaQuiz() {
         </div>
       </main>
 
-      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
+      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-4">
         <Stat value={wpm} label="wpm" />
         <Stat value={`${accuracy}%`} label="accuracy" />
         <Stat value={streak} label="streak" />
@@ -585,12 +585,14 @@ export default function KanaQuiz() {
         <Stat value={`${avgTimeSec.toFixed(1)}s`} label="avg time" />
       </div>
 
-      <div className="flex items-center gap-3 overflow-x-auto px-16 py-4">
-        <span className="shrink-0 text-sm text-zinc-600">recent</span>
+      <div className="flex items-center gap-3 overflow-x-auto px-16 py-3">
+        <span className="shrink-0 rounded-md border border-transparent px-2.5 py-1 text-sm text-zinc-600">
+          recent
+        </span>
         {history.map((h) => (
           <div
             key={h.key}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm ${
               h.result === "correct"
                 ? "border-green-900/60 bg-green-950/40 text-green-400"
                 : h.result === "wrong"

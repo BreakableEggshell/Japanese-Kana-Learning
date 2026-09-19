@@ -458,7 +458,7 @@ export default function PracticeQuiz() {
         </div>
       </header>
 
-      <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4">
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-10 overflow-hidden px-4 pb-8">
         {current && next && (
           <>
             <div className="flex items-center justify-center gap-8 sm:gap-12">
@@ -482,7 +482,7 @@ export default function PracticeQuiz() {
               </div>
 
               <div
-                className={`flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-64 sm:w-64 ${cardRing}`}
+                className={`flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border bg-zinc-950 shadow-lg transition-colors duration-200 sm:h-48 sm:w-48 ${cardRing}`}
               >
                 <span
                   key={`${current.char}-${seenCount}`}
@@ -605,7 +605,7 @@ export default function PracticeQuiz() {
         </div>
       </main>
 
-      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
+      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-4">
         <Stat value={wpm} label="wpm" />
         <Stat value={`${accuracy}%`} label="accuracy" />
         <Stat value={streak} label="streak" />
@@ -613,12 +613,14 @@ export default function PracticeQuiz() {
         <Stat value={`${avgTimeSec.toFixed(1)}s`} label="avg time" />
       </div>
 
-      <div className="flex items-center gap-3 overflow-x-auto px-16 py-4">
-        <span className="shrink-0 text-sm text-zinc-600">recent</span>
+      <div className="flex items-center gap-3 overflow-x-auto px-16 py-3">
+        <span className="shrink-0 rounded-md border border-transparent px-2.5 py-1 text-sm text-zinc-600">
+          recent
+        </span>
         {history.map((h) => (
           <div
             key={h.key}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm ${
               h.result === "correct"
                 ? "border-green-900/60 bg-green-950/40 text-green-400"
                 : h.result === "wrong"
@@ -735,13 +737,13 @@ function KanaMenuPanel({
   onCheckNone: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col px-5 py-6 font-mono text-zinc-50">
+    <div className="flex h-full flex-col px-4 py-6 font-mono text-zinc-50">
       <h2 className="mb-6 pr-6 text-lg text-zinc-200">
         Check the row that you want to appear in the flashcard.
       </h2>
 
       <div className="flex gap-6">
-        <div className="flex w-32 shrink-0 flex-col gap-1.5">
+        <div className="flex w-28 shrink-0 flex-col gap-1.5">
           <button
             onClick={onCheckAll}
             className="rounded-md border border-zinc-800 px-2.5 py-1.5 text-left text-sm text-zinc-500 transition-colors hover:text-zinc-300"
@@ -794,11 +796,11 @@ function KanaRowGrid({
           <div className="grid grid-cols-5 gap-2">
             {row.map((idx, ci) =>
               idx === null ? (
-                <div key={ci} className="h-16 w-14" />
+                <div key={ci} className="h-14 w-12" />
               ) : (
                 <div
                   key={ci}
-                  className={`flex h-16 w-14 flex-col items-center justify-center rounded-lg border text-lg transition-colors ${
+                  className={`flex h-14 w-12 flex-col items-center justify-center rounded-lg border text-lg transition-colors ${
                     rows[ri]
                       ? "border-green-800/60 bg-green-950/30 text-green-400"
                       : "border-zinc-800 bg-zinc-900/40 text-zinc-600"

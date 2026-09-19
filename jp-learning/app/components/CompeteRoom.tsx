@@ -395,7 +395,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
         <div />
       </header>
 
-      <main className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-4">
+      <main className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-4 pb-8">
         {!finished && (
           <div className="text-2xl text-zinc-300 tabular-nums">
             {running ? formatDuration(elapsedMs) : "Start typing when you're ready"}
@@ -407,7 +407,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
             <div className="flex items-center justify-center gap-8 sm:gap-12">
               <div className="flex h-20 w-20 items-center justify-center" />
 
-              <div className="flex h-48 w-48 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-64 sm:w-64">
+              <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-lg sm:h-48 sm:w-48">
                 <span
                   key={current.char}
                   className={`text-8xl font-medium select-none sm:text-9xl ${
@@ -579,7 +579,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
         </div>
       </main>
 
-      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
+      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-4">
         <Stat value={wpm} label="wpm" />
         <Stat value={`${accuracy}%`} label="accuracy" />
         <Stat value={streak} label="streak" />
@@ -587,12 +587,14 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
         <Stat value={`${avgTimeSec.toFixed(1)}s`} label="avg time" />
       </div>
 
-      <div className="flex items-center gap-3 overflow-x-auto px-16 py-4">
-        <span className="shrink-0 text-sm text-zinc-600">recent</span>
+      <div className="flex items-center gap-3 overflow-x-auto px-16 py-3">
+        <span className="shrink-0 rounded-md border border-transparent px-2.5 py-1 text-sm text-zinc-600">
+          recent
+        </span>
         {history.map((h) => (
           <div
             key={h.key}
-            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm ${
               h.result === "correct"
                 ? "border-green-900/60 bg-green-950/40 text-green-400"
                 : "border-red-900/60 bg-red-950/40 text-red-400"
