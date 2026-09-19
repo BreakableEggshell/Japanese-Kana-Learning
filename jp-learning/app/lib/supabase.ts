@@ -7,7 +7,7 @@ export const supabase = createClient(
 
 export type KanaType = "hiragana" | "katakana" | "mixed";
 
-export const LEADERBOARD_SIZE = 30;
+export const LEADERBOARD_SIZE = 15;
 
 export type LeaderboardEntry = {
   id: string;
@@ -19,7 +19,7 @@ export type LeaderboardEntry = {
 };
 
 // Inserts a new score and re-ranks the leaderboard for that kana type,
-// demoting anything that fell outside the top 30 (see submit_score() in Supabase).
+// demoting anything that fell outside the top LEADERBOARD_SIZE (see submit_score() in Supabase).
 // Returns the new entry's placement (1-indexed), or null if it didn't rank at all.
 export async function submitScore(name: string, timeMs: number, kanaType: KanaType) {
   return supabase.rpc("submit_score", {

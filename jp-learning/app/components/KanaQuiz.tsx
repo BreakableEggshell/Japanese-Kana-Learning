@@ -38,7 +38,8 @@ const POOLS: Record<Mode, KanaEntry[]> = {
 
 const MODES: Mode[] = ["hiragana", "katakana", "mixed"];
 const REVEAL_DELAY_MS = 500;
-const IDLE_PAUSE_MS = 10000;
+const IDLE_PAUSE_MS = 30000;
+const LEADERBOARD_REFRESH_MS = 30000;
 const EARLY_ATTEMPTS_THRESHOLD = 8;
 const BEGINNER_GLOW_MS = 5000;
 const BUG_REPORT_URL = "https://github.com/BreakableEggshell/Japanese-Kana-Learning/issues";
@@ -88,7 +89,7 @@ function masteryClasses(m: Mastery) {
 let keySeq = 0;
 const nextKey = () => keySeq++;
 
-export default function HiraganaQuiz() {
+export default function KanaQuiz() {
   const [mode, setMode] = useState<Mode>("hiragana");
   const [skipAnimation, setSkipAnimation] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -107,6 +108,7 @@ export default function HiraganaQuiz() {
   const [seenCount, setSeenCount] = useState(0);
   const [totalCorrectChars, setTotalCorrectChars] = useState(0);
   const [totalAnswerMs, setTotalAnswerMs] = useState(0);
+  const [avgAnswerCount, setAvgAnswerCount] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -124,6 +126,7 @@ export default function HiraganaQuiz() {
   const itemStartRef = useRef(Date.now());
   const lastActivityRef = useRef(Date.now());
   const pauseStartRef = useRef<number | null>(null);
+  const itemWasIdleRef = useRef(false);
   const earlyAttemptsRef = useRef<boolean[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -143,11 +146,13 @@ export default function HiraganaQuiz() {
     setSeenCount(0);
     setTotalCorrectChars(0);
     setTotalAnswerMs(0);
+    setAvgAnswerCount(0);
     setAnsweredCount(0);
     startTimeRef.current = Date.now();
     itemStartRef.current = Date.now();
     lastActivityRef.current = Date.now();
     pauseStartRef.current = null;
+    itemWasIdleRef.current = false;
     setElapsedSeconds(0);
   }, []);
 
@@ -175,7 +180,10 @@ export default function HiraganaQuiz() {
     const id = setInterval(() => {
       if (Date.now() - lastActivityRef.current >= IDLE_PAUSE_MS) {
         setPaused((wasPaused) => {
-          if (!wasPaused) pauseStartRef.current = Date.now();
+          if (!wasPaused) {
+            pauseStartRef.current = Date.now();
+            itemWasIdleRef.current = true;
+          }
           return true;
         });
         return;
@@ -205,7 +213,12 @@ export default function HiraganaQuiz() {
 
       if (result !== "skip") {
         setAnsweredCount((c) => c + 1);
-        setTotalAnswerMs((t) => t + elapsed);
+        // If the player went AFK on this item, its time was inflated by the
+        // idle wait — exclude it from the average-time stat entirely.
+        if (!itemWasIdleRef.current) {
+          setTotalAnswerMs((t) => t + elapsed);
+          setAvgAnswerCount((c) => c + 1);
+        }
         if (result === "correct") {
           setCorrectCount((c) => c + 1);
           setStreak((s) => s + 1);
@@ -246,6 +259,7 @@ export default function HiraganaQuiz() {
       setInput("");
       setRevealed(false);
       itemStartRef.current = Date.now();
+      itemWasIdleRef.current = false;
     },
     [current, next, mode, muted]
   );
@@ -288,7 +302,7 @@ export default function HiraganaQuiz() {
   }
 
   const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 100;
-  const avgTimeSec = answeredCount > 0 ? totalAnswerMs / answeredCount / 1000 : 0;
+  const avgTimeSec = avgAnswerCount > 0 ? totalAnswerMs / avgAnswerCount / 1000 : 0;
   const minutes = elapsedSeconds / 60;
   const wpm = minutes > 0 ? Math.round(totalCorrectChars / 5 / minutes) : 0;
 
@@ -604,8 +618,17 @@ function LeaderboardPanel({ mode }: { mode: Mode }) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const cacheRef = useRef<Partial<Record<Mode, { data: LeaderboardEntry[]; fetchedAt: number }>>>({});
 
   useEffect(() => {
+    const cached = cacheRef.current[mode];
+    if (cached && Date.now() - cached.fetchedAt < LEADERBOARD_REFRESH_MS) {
+      setEntries(cached.data);
+      setLoading(false);
+      setError(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(false);
@@ -622,7 +645,9 @@ function LeaderboardPanel({ mode }: { mode: Mode }) {
         if (error) {
           setError(true);
         } else {
-          setEntries(data ?? []);
+          const rows = data ?? [];
+          cacheRef.current[mode] = { data: rows, fetchedAt: Date.now() };
+          setEntries(rows);
         }
         setLoading(false);
       });
@@ -709,11 +734,14 @@ function StatsPanel({
               ) : (
                 <div
                   key={`${ri}-${ci}`}
-                  className={`flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${masteryClasses(
+                  className={`group relative flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${masteryClasses(
                     getMastery(charStats[source[idx].char])
                   )}`}
                 >
                   {source[idx].char}
+                  <span className="pointer-events-none absolute -top-7 left-1/2 z-20 hidden -translate-x-1/2 rounded bg-zinc-800 px-1.5 py-0.5 text-xs whitespace-nowrap text-zinc-100 group-hover:block">
+                    {source[idx].answers[0]}
+                  </span>
                 </div>
               )
             )

@@ -10,6 +10,13 @@ import { isInappropriateName } from "@/app/lib/name-filter";
 type Script = "hiragana" | "katakana";
 type Result = "correct" | "wrong";
 
+type HistoryItem = {
+  key: number;
+  char: string;
+  romaji: string;
+  result: Result;
+};
+
 const POOLS: Record<KanaType, KanaEntry[]> = {
   hiragana: HIRAGANA,
   katakana: KATAKANA,
@@ -25,6 +32,9 @@ function shuffle<T>(arr: T[]): T[] {
   return copy;
 }
 
+let keySeq = 0;
+const nextKey = () => keySeq++;
+
 export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const pool = POOLS[kanaType];
 
@@ -35,6 +45,10 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const [charResult, setCharResult] = useState<Record<string, Result>>({});
   const [correctCount, setCorrectCount] = useState(0);
   const [wrongCount, setWrongCount] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [totalCorrectChars, setTotalCorrectChars] = useState(0);
+  const [totalAnswerMs, setTotalAnswerMs] = useState(0);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const [elapsedMs, setElapsedMs] = useState(0);
   const [running, setRunning] = useState(false);
@@ -45,7 +59,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const [muted, setMuted] = useState(false);
   const [resetOnMistake, setResetOnMistake] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(true);
   const [statsScript, setStatsScript] = useState<Script>(kanaType === "katakana" ? "katakana" : "hiragana");
 
   const [qualifyingPlace, setQualifyingPlace] = useState<number | null>(null);
@@ -58,6 +72,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const [finalPlacement, setFinalPlacement] = useState<number | null>(null);
 
   const startTimeRef = useRef(Date.now());
+  const itemStartRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const startRun = useCallback(() => {
@@ -68,6 +83,10 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     setCharResult({});
     setCorrectCount(0);
     setWrongCount(0);
+    setStreak(0);
+    setTotalCorrectChars(0);
+    setTotalAnswerMs(0);
+    setHistory([]);
     setElapsedMs(0);
     setFinished(false);
     setFinalTimeMs(0);
@@ -78,9 +97,16 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     setSubmitted(false);
     setSubmitError(false);
     setFinalPlacement(null);
-    startTimeRef.current = Date.now();
-    setRunning(true);
+    setRunning(false);
   }, [pool]);
+
+  const beginRunIfNeeded = useCallback(() => {
+    if (running) return;
+    const now = Date.now();
+    startTimeRef.current = now;
+    itemStartRef.current = now;
+    setRunning(true);
+  }, [running]);
 
   useEffect(() => {
     startRun();
@@ -128,12 +154,24 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
       if (!current) return;
       playSound(result === "correct" ? "/correct.mp3" : "/wrong.mp3", muted);
 
+      const itemElapsed = Date.now() - itemStartRef.current;
+      setTotalAnswerMs((t) => t + itemElapsed);
+      setHistory((prev) =>
+        [...prev, { key: nextKey(), char: current.char, romaji: current.answers[0], result }].slice(-10)
+      );
+
       if (result === "correct") {
         setCorrectCount((c) => c + 1);
+        setStreak((s) => s + 1);
+        setTotalCorrectChars((c) => c + current.answers[0].length);
       } else {
         setWrongCount((c) => c + 1);
+        setStreak(0);
       }
-      setCharResult((prev) => ({ ...prev, [current.char]: result }));
+      // Once a kana has been gotten wrong this run, keep it flagged red even
+      // if it's answered correctly later (it stays in the queue until then).
+      setCharResult((prev) => ({ ...prev, [current.char]: prev[current.char] === "wrong" ? "wrong" : result }));
+      itemStartRef.current = Date.now();
 
       if (resetOnMistake && result === "wrong") {
         startRun();
@@ -158,6 +196,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     const raw = e.target.value.toLowerCase().replace(/[^a-z]/g, "");
     setInput(raw);
     if (!raw) return;
+    beginRunIfNeeded();
 
     if (isSettled(raw, current.answers)) {
       advance("correct");
@@ -171,6 +210,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     if (e.key === "Enter") {
       e.preventDefault();
       if (!input.trim()) return;
+      beginRunIfNeeded();
       const isCorrect = current.answers.includes(input);
       advance(isCorrect ? "correct" : "wrong");
     }
@@ -203,6 +243,12 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   function handleCancelPopup() {
     setShowCongrats(false);
   }
+
+  const seenCount = correctCount + wrongCount;
+  const accuracy = seenCount > 0 ? Math.round((correctCount / seenCount) * 100) : 100;
+  const avgTimeSec = seenCount > 0 ? totalAnswerMs / seenCount / 1000 : 0;
+  const minutes = elapsedMs / 1000 / 60;
+  const wpm = minutes > 0 ? Math.round(totalCorrectChars / 5 / minutes) : 0;
 
   return (
     <div
@@ -299,7 +345,11 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
       </header>
 
       <main className="relative flex flex-1 flex-col items-center justify-center gap-6 overflow-hidden px-4">
-        <div className="text-2xl text-zinc-300 tabular-nums">{formatDuration(elapsedMs)}</div>
+        {!finished && (
+          <div className="text-2xl text-zinc-300 tabular-nums">
+            {running ? formatDuration(elapsedMs) : "Start typing when you're ready"}
+          </div>
+        )}
 
         {!finished && current ? (
           <>
@@ -437,19 +487,60 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
           >
             ✕
           </button>
-          <CompeteStatsPanel charResult={charResult} script={statsScript} onScriptChange={setStatsScript} />
+          <CompeteStatsPanel
+            charResult={charResult}
+            correctCount={correctCount}
+            script={statsScript}
+            onScriptChange={setStatsScript}
+          />
         </div>
       </main>
+
+      <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
+        <Stat value={wpm} label="wpm" />
+        <Stat value={`${accuracy}%`} label="accuracy" />
+        <Stat value={streak} label="streak" />
+        <Stat value={seenCount} label="seen" />
+        <Stat value={`${avgTimeSec.toFixed(1)}s`} label="avg time" />
+      </div>
+
+      <div className="flex items-center gap-3 overflow-x-auto px-16 py-4">
+        <span className="shrink-0 text-sm text-zinc-600">recent</span>
+        {history.map((h) => (
+          <div
+            key={h.key}
+            className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+              h.result === "correct"
+                ? "border-green-900/60 bg-green-950/40 text-green-400"
+                : "border-red-900/60 bg-red-950/40 text-red-400"
+            }`}
+          >
+            <span>{h.char}</span>
+            <span className="opacity-70">{h.romaji}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-4xl font-semibold text-zinc-50">{value}</span>
+      <span className="text-xs tracking-widest text-zinc-600 uppercase">{label}</span>
     </div>
   );
 }
 
 function CompeteStatsPanel({
   charResult,
+  correctCount,
   script,
   onScriptChange,
 }: {
   charResult: Record<string, Result>;
+  correctCount: number;
   script: Script;
   onScriptChange: (s: Script) => void;
 }) {
@@ -463,7 +554,10 @@ function CompeteStatsPanel({
 
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
-      <h2 className="mb-6 text-lg text-zinc-200">gojūon progress</h2>
+      <div className="mb-6 flex items-center justify-between pr-6">
+        <h2 className="text-lg text-zinc-200">gojūon progress</h2>
+        <span className="text-base text-green-400">{correctCount} correct</span>
+      </div>
 
       <div className="flex gap-6">
         <div className="grid grid-cols-5 content-start gap-2">
@@ -474,11 +568,14 @@ function CompeteStatsPanel({
               ) : (
                 <div
                   key={`${ri}-${ci}`}
-                  className={`flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${cellClasses(
+                  className={`group relative flex h-11 w-11 items-center justify-center rounded-lg border text-lg ${cellClasses(
                     charResult[source[idx].char]
                   )}`}
                 >
                   {source[idx].char}
+                  <span className="pointer-events-none absolute -top-7 left-1/2 z-20 hidden -translate-x-1/2 rounded bg-zinc-800 px-1.5 py-0.5 text-xs whitespace-nowrap text-zinc-100 group-hover:block">
+                    {source[idx].answers[0]}
+                  </span>
                 </div>
               )
             )

@@ -1,5 +1,5 @@
-import HiraganaQuiz from "@/app/components/HiraganaQuiz";
+import KanaQuiz from "@/app/components/KanaQuiz";
 
 export default function Home() {
-  return <HiraganaQuiz />;
+  return <KanaQuiz />;
 }
