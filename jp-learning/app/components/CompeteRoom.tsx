@@ -289,7 +289,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
 
   return (
     <div
-      className="flex min-h-screen w-full flex-col bg-black font-mono text-zinc-50"
+      className="flex h-screen w-full flex-col overflow-hidden bg-black font-mono text-zinc-50"
       onClick={() => {
         inputRef.current?.focus();
         setOptionsOpen(false);

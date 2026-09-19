@@ -310,7 +310,7 @@ export default function KanaQuiz() {
 
   return (
     <div
-      className="flex min-h-screen w-full flex-col bg-black font-mono text-zinc-50"
+      className="flex h-screen w-full flex-col overflow-hidden bg-black font-mono text-zinc-50"
       onClick={() => {
         inputRef.current?.focus();
         setOptionsOpen(false);
@@ -530,7 +530,7 @@ export default function KanaQuiz() {
                   practiceGlow ? "animate-practice-glow" : "border-zinc-800"
                 }`}
               >
-                {practiceStruggling ? "Practice? Learn the basics here!" : "Practice?"}
+                {practiceStruggling ? "Just starting? Learn the basics here!" : "Just starting out?"}
               </Link>
             </div>
           </>
