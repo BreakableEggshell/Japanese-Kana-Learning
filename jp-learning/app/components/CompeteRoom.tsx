@@ -487,12 +487,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
           >
             ✕
           </button>
-          <CompeteStatsPanel
-            charResult={charResult}
-            correctCount={correctCount}
-            script={statsScript}
-            onScriptChange={setStatsScript}
-          />
+          <CompeteStatsPanel charResult={charResult} script={statsScript} onScriptChange={setStatsScript} />
         </div>
       </main>
 
@@ -535,16 +530,15 @@ function Stat({ value, label }: { value: string | number; label: string }) {
 
 function CompeteStatsPanel({
   charResult,
-  correctCount,
   script,
   onScriptChange,
 }: {
   charResult: Record<string, Result>;
-  correctCount: number;
   script: Script;
   onScriptChange: (s: Script) => void;
 }) {
   const source = script === "hiragana" ? HIRAGANA : KATAKANA;
+  const correctInScript = source.filter((k) => charResult[k.char] === "correct").length;
 
   function cellClasses(result: Result | undefined) {
     if (result === "correct") return "border-green-800/60 bg-green-950/40 text-green-400";
@@ -556,7 +550,9 @@ function CompeteStatsPanel({
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
       <div className="mb-6 flex items-center justify-between pr-6">
         <h2 className="text-lg text-zinc-200">gojūon progress</h2>
-        <span className="text-base text-green-400">{correctCount} correct</span>
+        <span className="text-base text-green-400">
+          {correctInScript}/{source.length} correct
+        </span>
       </div>
 
       <div className="flex gap-6">

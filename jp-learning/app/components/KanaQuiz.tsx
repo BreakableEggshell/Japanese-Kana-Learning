@@ -42,7 +42,6 @@ const IDLE_PAUSE_MS = 30000;
 const LEADERBOARD_REFRESH_MS = 30000;
 const EARLY_ATTEMPTS_THRESHOLD = 8;
 const BEGINNER_GLOW_MS = 5000;
-const BUG_REPORT_URL = "https://github.com/BreakableEggshell/Japanese-Kana-Learning/issues";
 
 const MASTERY_LEGEND: { key: Mastery; label: string; dot: string }[] = [
   { key: "mastered", label: "mastered", dot: "bg-green-500" },
@@ -411,14 +410,6 @@ export default function KanaQuiz() {
                     />
                     mute audio
                   </label>
-                  <a
-                    href={BUG_REPORT_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 block text-sm text-zinc-400 transition-colors hover:text-zinc-200"
-                  >
-                    report a bug
-                  </a>
                 </div>
               )}
             </div>
