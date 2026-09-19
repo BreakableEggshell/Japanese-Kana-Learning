@@ -100,7 +100,6 @@ export default function BeginnerQuiz() {
 
   const [hiraganaRows, setHiraganaRows] = useState<boolean[]>(defaultRows);
   const [katakanaRows, setKatakanaRows] = useState<boolean[]>(defaultRows);
-  const [menuScript, setMenuScript] = useState<Script>("hiragana");
 
   const hiraganaPool = useMemo(() => selectedEntries(HIRAGANA, hiraganaRows), [hiraganaRows]);
   const katakanaPool = useMemo(() => selectedEntries(KATAKANA, katakanaRows), [katakanaRows]);
@@ -309,16 +308,16 @@ export default function BeginnerQuiz() {
     });
   }
 
-  function checkAll(script: Script) {
-    const setRows = script === "hiragana" ? setHiraganaRows : setKatakanaRows;
-    setRows(GOJUON_ROWS.map(() => true));
+  function checkAll() {
+    setHiraganaRows(GOJUON_ROWS.map(() => true));
+    setKatakanaRows(GOJUON_ROWS.map(() => true));
   }
 
   // "Check none" can't leave zero rows selected, so it falls back to the
   // same single-row default the page starts with.
-  function checkNone(script: Script) {
-    const setRows = script === "hiragana" ? setHiraganaRows : setKatakanaRows;
-    setRows(defaultRows());
+  function checkNone() {
+    setHiraganaRows(defaultRows());
+    setKatakanaRows(defaultRows());
   }
 
   const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 100;
@@ -580,8 +579,6 @@ export default function BeginnerQuiz() {
             ✕
           </button>
           <KanaMenuPanel
-            script={menuScript}
-            onScriptChange={setMenuScript}
             hiraganaRows={hiraganaRows}
             katakanaRows={katakanaRows}
             onToggleRow={toggleRow}
@@ -706,25 +703,18 @@ function StatsPanel({
 }
 
 function KanaMenuPanel({
-  script,
-  onScriptChange,
   hiraganaRows,
   katakanaRows,
   onToggleRow,
   onCheckAll,
   onCheckNone,
 }: {
-  script: Script;
-  onScriptChange: (s: Script) => void;
   hiraganaRows: boolean[];
   katakanaRows: boolean[];
   onToggleRow: (s: Script, rowIndex: number) => void;
-  onCheckAll: (s: Script) => void;
-  onCheckNone: (s: Script) => void;
+  onCheckAll: () => void;
+  onCheckNone: () => void;
 }) {
-  const source = script === "hiragana" ? HIRAGANA : KATAKANA;
-  const rows = script === "hiragana" ? hiraganaRows : katakanaRows;
-
   return (
     <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
       <h2 className="mb-6 pr-6 text-lg text-zinc-200">
@@ -732,71 +722,73 @@ function KanaMenuPanel({
       </h2>
 
       <div className="flex gap-6">
-        <div className="flex w-32 shrink-0 flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            {(["hiragana", "katakana"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => onScriptChange(s)}
-                className={`rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors ${
-                  s === script
-                    ? "border-green-800/60 bg-green-950/30 text-green-400"
-                    : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <button
-              onClick={() => onCheckAll(script)}
-              className="rounded-md border border-zinc-800 px-2.5 py-1.5 text-left text-sm text-zinc-500 transition-colors hover:text-zinc-300"
-            >
-              check all
-            </button>
-            <button
-              onClick={() => onCheckNone(script)}
-              className="rounded-md border border-zinc-800 px-2.5 py-1.5 text-left text-sm text-zinc-500 transition-colors hover:text-zinc-300"
-            >
-              check none
-            </button>
-          </div>
+        <div className="flex w-32 shrink-0 flex-col gap-1.5">
+          <button
+            onClick={onCheckAll}
+            className="rounded-md border border-zinc-800 px-2.5 py-1.5 text-left text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            check all
+          </button>
+          <button
+            onClick={onCheckNone}
+            className="rounded-md border border-zinc-800 px-2.5 py-1.5 text-left text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            check none
+          </button>
         </div>
 
-        <div className="flex flex-col gap-2">
-          {GOJUON_ROWS.map((row, ri) => (
-            <div key={ri} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={rows[ri]}
-                onChange={() => onToggleRow(script, ri)}
-                className="accent-green-500"
-              />
-              <div className="grid grid-cols-5 gap-2">
-                {row.map((idx, ci) =>
-                  idx === null ? (
-                    <div key={ci} className="h-14 w-12" />
-                  ) : (
-                    <div
-                      key={ci}
-                      className={`flex h-14 w-12 flex-col items-center justify-center rounded-lg border text-lg transition-colors ${
-                        rows[ri]
-                          ? "border-green-800/60 bg-green-950/30 text-green-400"
-                          : "border-zinc-800 bg-zinc-900/40 text-zinc-600"
-                      }`}
-                    >
-                      <span>{source[idx].char}</span>
-                      <span className="text-[10px] opacity-70">{source[idx].answers[0]}</span>
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-col gap-6">
+          <KanaRowGrid script="hiragana" source={HIRAGANA} rows={hiraganaRows} onToggleRow={onToggleRow} />
+          <KanaRowGrid script="katakana" source={KATAKANA} rows={katakanaRows} onToggleRow={onToggleRow} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function KanaRowGrid({
+  script,
+  source,
+  rows,
+  onToggleRow,
+}: {
+  script: Script;
+  source: KanaEntry[];
+  rows: boolean[];
+  onToggleRow: (s: Script, rowIndex: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-sm text-zinc-500">{script}</h3>
+      {GOJUON_ROWS.map((row, ri) => (
+        <div key={ri} className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={rows[ri]}
+            onChange={() => onToggleRow(script, ri)}
+            className="accent-green-500"
+          />
+          <div className="grid grid-cols-5 gap-2">
+            {row.map((idx, ci) =>
+              idx === null ? (
+                <div key={ci} className="h-16 w-14" />
+              ) : (
+                <div
+                  key={ci}
+                  className={`flex h-16 w-14 flex-col items-center justify-center rounded-lg border text-lg transition-colors ${
+                    rows[ri]
+                      ? "border-green-800/60 bg-green-950/30 text-green-400"
+                      : "border-zinc-800 bg-zinc-900/40 text-zinc-600"
+                  }`}
+                >
+                  <span>{source[idx].char}</span>
+                  <span className="text-sm opacity-70">{source[idx].answers[0]}</span>
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
