@@ -4,7 +4,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { HIRAGANA, KATAKANA, GOJUON_ROWS, type KanaEntry } from "@/app/lib/kana";
 import { isDead, isSettled, MIN_CHARS_BEFORE_WRONG, playSound, formatDuration } from "@/app/lib/kana-input";
-import { LEADERBOARD_SIZE, estimatePlacement, submitScore, type KanaType } from "@/app/lib/supabase";
+import {
+  supabase,
+  LEADERBOARD_SIZE,
+  estimatePlacement,
+  submitScore,
+  type KanaType,
+  type LeaderboardEntry,
+} from "@/app/lib/supabase";
 import { isInappropriateName } from "@/app/lib/name-filter";
 
 type Script = "hiragana" | "katakana";
@@ -60,6 +67,8 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
   const [resetOnMistake, setResetOnMistake] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(true);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState(0);
   const [statsScript, setStatsScript] = useState<Script>(kanaType === "katakana" ? "katakana" : "hiragana");
 
   const [qualifyingPlace, setQualifyingPlace] = useState<number | null>(null);
@@ -238,6 +247,7 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
     setFinalPlacement(typeof data === "number" ? data : qualifyingPlace);
     setSubmitted(true);
     setShowCongrats(false);
+    setLeaderboardRefreshKey((k) => k + 1);
   }
 
   function handleCancelPopup() {
@@ -284,6 +294,20 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
               }`}
             >
               stats
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLeaderboardOpen((o) => !o);
+                inputRef.current?.focus();
+              }}
+              className={`rounded-md border px-3 py-1.5 text-base transition-colors ${
+                leaderboardOpen
+                  ? "border-green-800/60 bg-green-950/30 text-green-400"
+                  : "border-zinc-800 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              leaderboard
             </button>
 
             <div className="relative">
@@ -489,6 +513,21 @@ export default function CompeteRoom({ kanaType }: { kanaType: KanaType }) {
           </button>
           <CompeteStatsPanel charResult={charResult} script={statsScript} onScriptChange={setStatsScript} />
         </div>
+
+        <div
+          className={`absolute inset-y-0 right-0 z-10 w-[480px] max-w-[90vw] overflow-y-auto border-l border-zinc-800 bg-zinc-950 shadow-2xl transition-transform duration-300 ${
+            leaderboardOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
+          }`}
+        >
+          <button
+            aria-label="Close leaderboard"
+            onClick={() => setLeaderboardOpen(false)}
+            className="absolute top-4 right-4 text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            ✕
+          </button>
+          <CompeteLeaderboardPanel kanaType={kanaType} refreshKey={leaderboardRefreshKey} />
+        </div>
       </main>
 
       <div className="grid grid-cols-5 divide-x divide-zinc-900 border-t border-zinc-900 py-6">
@@ -607,6 +646,77 @@ function CompeteStatsPanel({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CompeteLeaderboardPanel({ kanaType, refreshKey }: { kanaType: KanaType; refreshKey: number }) {
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+
+    supabase
+      .from("kana_comp")
+      .select("*")
+      .eq("kana_type", kanaType)
+      .eq("ld_placer", true)
+      .order("time", { ascending: true })
+      .limit(LEADERBOARD_SIZE)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          setError(true);
+        } else {
+          setEntries(data ?? []);
+        }
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [kanaType, refreshKey]);
+
+  return (
+    <div className="flex h-full flex-col p-6 font-mono text-zinc-50">
+      <h2 className="mb-6 text-lg text-zinc-200">{kanaType} leaderboard</h2>
+
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">loading…</div>
+      ) : error ? (
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-red-400">
+          couldn&apos;t load the leaderboard
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-600">
+          No scores yet — be the first to set a record!
+        </div>
+      ) : (
+        <ol className="flex flex-col gap-2">
+          {entries.map((entry, i) => (
+            <li
+              key={entry.id}
+              className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2 text-sm"
+            >
+              <span className="flex items-center gap-3">
+                <span className="w-5 text-zinc-500">{i + 1}</span>
+                <span className="text-zinc-200">{entry.name}</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="text-zinc-400">{formatDuration(entry.time)}</span>
+                <span className="text-xs text-zinc-600">
+                  {new Date(entry.created_at).toLocaleDateString()}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
