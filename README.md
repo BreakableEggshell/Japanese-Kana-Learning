@@ -22,14 +22,11 @@ Live at [japanese-kana.dcism.org](https://japanese-kana.dcism.org).
 
 ## Getting started
 
-The app is in the `jp-learning/` directory.
-
 ```bash
-cd jp-learning
 npm install
 ```
 
-Create `jp-learning/.env` with your Supabase project's credentials:
+Create a `.env` file in the project root with your Supabase project's credentials:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -76,7 +73,6 @@ The anon key must be allowed to read `kana_comp` and execute `submit_score`.
 ## Project structure
 
 ```
-jp-learning/
 ├── app/
 │   ├── page.tsx                  # Free play
 │   ├── practice/page.tsx         # Practice by gojūon row
