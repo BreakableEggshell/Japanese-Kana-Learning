@@ -26,7 +26,7 @@ Live at [japanese-kana.dcism.org](https://japanese-kana.dcism.org).
 npm install
 ```
 
-Create a `.env` file in the project root with your Supabase project's credentials:
+Optionally, to enable the leaderboard, create a `.env` file in the project root with your Supabase project's credentials:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -41,16 +41,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-| Command         | Description                  |
-| --------------- | ---------------------------- |
-| `npm run dev`   | Start the development server |
-| `npm run build` | Build for production         |
-| `npm run start` | Serve the production build   |
-| `npm run lint`  | Run ESLint                   |
-
 ## Supabase setup
 
-Free play and practice work without a database. The leaderboard needs two things in Supabase.
+This section is optional. Free play and practice work without a database. The leaderboard needs two things in Supabase.
 
 **1. A `kana_comp` table**
 
